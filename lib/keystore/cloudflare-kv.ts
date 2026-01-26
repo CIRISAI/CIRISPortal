@@ -9,10 +9,7 @@
  *   keys:{orgId}:active -> keyId of active key
  *   keys:{orgId}:{keyId}:metadata -> KeyPairMetadata (JSON)
  *   keys:{orgId}:{keyId}:public -> PublicKeys (JSON)
- *   keys:{orgId}:{keyId}:private -> EncryptedPrivateKeys (encrypted blob)
- *
- * IMPORTANT: This is a placeholder implementation. Actual crypto operations
- * require WebCrypto API and will be implemented when deployed to Cloudflare Workers.
+ *   keys:{orgId}:{keyId}:private -> EncryptedKeyData (JSON)
  */
 
 import type {
@@ -23,18 +20,20 @@ import type {
   SignRequest,
   KeyRotationResult,
 } from './types';
-
-interface _EncryptedPrivateKeys {
-  classical: string; // AES-256-GCM encrypted Ed25519 private key
-  postQuantum: string; // AES-256-GCM encrypted ML-DSA-65 private key
-  iv: string; // Initialization vector
-  encryptedDEK: string; // DEK encrypted with KEK
-}
+import {
+  generateEncryptedKeyPair,
+  signWithEncryptedKey,
+  deriveOrgKey,
+  getMasterKEK,
+  type EncryptedKeyData,
+} from './crypto';
 
 export class CloudflareKVKeyStore implements KeyStore {
-  // In production, this would be injected from Cloudflare Workers context
-  // For now, we'll use a placeholder that throws helpful errors
+  // KV namespace injected from Cloudflare Workers context
   private kv: KVNamespace | null = null;
+
+  // Cached master KEK (loaded on first use)
+  private masterKEK: Uint8Array | null = null;
 
   constructor(kv?: KVNamespace) {
     this.kv = kv || null;
@@ -44,80 +43,143 @@ export class CloudflareKVKeyStore implements KeyStore {
     if (!this.kv) {
       throw new Error(
         'KV namespace not initialized. In Cloudflare Workers, pass the KV binding to the constructor. ' +
-          'In development, use a mock implementation.'
+          'In development, use MockKeyStore instead.'
       );
     }
     return this.kv;
   }
 
+  private async getMasterKey(): Promise<Uint8Array> {
+    if (!this.masterKEK) {
+      this.masterKEK = getMasterKEK();
+    }
+    return this.masterKEK;
+  }
+
+  private async getOrgKey(orgId: string): Promise<Uint8Array> {
+    const masterKey = await this.getMasterKey();
+    return deriveOrgKey(masterKey, orgId);
+  }
+
   private generateKeyId(): string {
-    // Generate a unique key ID with prefix
+    // Generate a unique key ID with prefix and timestamp
     const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 8);
+    const randomBytes = new Uint8Array(4);
+    if (typeof globalThis.crypto !== 'undefined') {
+      globalThis.crypto.getRandomValues(randomBytes);
+    } else {
+      // Fallback (should not happen in Cloudflare Workers)
+      for (let i = 0; i < 4; i++) {
+        randomBytes[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    const random = Array.from(randomBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
     return `k_${timestamp}${random}`;
   }
 
+  // Storage key helpers
+  private activeKeyPath(orgId: string): string {
+    return `keys:${orgId}:active`;
+  }
+
+  private metadataPath(orgId: string, keyId: string): string {
+    return `keys:${orgId}:${keyId}:metadata`;
+  }
+
+  private publicKeyPath(orgId: string, keyId: string): string {
+    return `keys:${orgId}:${keyId}:public`;
+  }
+
+  private privateKeyPath(orgId: string, keyId: string): string {
+    return `keys:${orgId}:${keyId}:private`;
+  }
+
   async generateKeyPair(orgId: string): Promise<KeyPairMetadata> {
+    const kv = this.getKV();
     const keyId = this.generateKeyId();
     const now = new Date().toISOString();
 
-    // TODO: Implement actual key generation using WebCrypto
-    // - Generate Ed25519 key pair
-    // - Generate ML-DSA-65 key pair (may need external library)
-    // - Encrypt private keys with envelope encryption
-    // - Store in KV
+    // Derive org-specific key from master key
+    const orgKey = await this.getOrgKey(orgId);
 
-    const metadata: KeyPairMetadata = {
-      keyId,
-      orgId,
-      status: 'active',
-      createdAt: now,
-      algorithm: {
-        classical: 'Ed25519',
-        postQuantum: 'ML-DSA-65',
-      },
-    };
+    try {
+      // Generate encrypted key pair using WebCrypto
+      const encryptedData = await generateEncryptedKeyPair(orgKey);
 
-    // Placeholder: In production, this would:
-    // 1. Generate actual key pairs
-    // 2. Encrypt private keys
-    // 3. Store in KV
-    // 4. Update the active key pointer
+      const metadata: KeyPairMetadata = {
+        keyId,
+        orgId,
+        status: 'active',
+        createdAt: now,
+        algorithm: {
+          classical: 'Ed25519',
+          postQuantum: 'ML-DSA-65',
+        },
+      };
 
-    console.log(`[KeyStore] Generated key pair ${keyId} for org ${orgId}`);
+      const publicKeys: PublicKeys = {
+        keyId,
+        classical: {
+          algorithm: 'Ed25519',
+          publicKey: encryptedData.classicalPublic,
+        },
+        postQuantum: {
+          algorithm: 'ML-DSA-65',
+          publicKey: encryptedData.postQuantumPublic,
+        },
+      };
 
-    return metadata;
+      // Store all key data in KV
+      await Promise.all([
+        kv.put(this.metadataPath(orgId, keyId), JSON.stringify(metadata)),
+        kv.put(this.publicKeyPath(orgId, keyId), JSON.stringify(publicKeys)),
+        kv.put(
+          this.privateKeyPath(orgId, keyId),
+          JSON.stringify(encryptedData)
+        ),
+        kv.put(this.activeKeyPath(orgId), keyId),
+      ]);
+
+      console.log(
+        `[CloudflareKVKeyStore] Generated key pair ${keyId} for org ${orgId}`
+      );
+
+      return metadata;
+    } finally {
+      // Clear sensitive org key from memory
+      orgKey.fill(0);
+    }
   }
 
   async getPublicKeys(
     orgId: string,
     keyId?: string
   ): Promise<PublicKeys | null> {
+    const kv = this.getKV();
+
     // If no keyId provided, get the active key
     const targetKeyId = keyId || (await this.getActiveKeyId(orgId));
     if (!targetKeyId) {
       return null;
     }
 
-    // TODO: Implement actual KV lookup
-    // const publicKeys = await this.getKV().get(`keys:${orgId}:${targetKeyId}:public`, 'json');
+    const publicKeysJson = await kv.get(
+      this.publicKeyPath(orgId, targetKeyId),
+      'json'
+    );
 
-    // Placeholder response
-    return {
-      keyId: targetKeyId,
-      classical: {
-        algorithm: 'Ed25519',
-        publicKey: 'PLACEHOLDER_ED25519_PUBLIC_KEY_BASE64',
-      },
-      postQuantum: {
-        algorithm: 'ML-DSA-65',
-        publicKey: 'PLACEHOLDER_MLDSA65_PUBLIC_KEY_BASE64',
-      },
-    };
+    if (!publicKeysJson) {
+      return null;
+    }
+
+    return publicKeysJson as PublicKeys;
   }
 
   async sign(request: SignRequest): Promise<HybridSignature> {
-    const { orgId, keyId, message: _message, purpose } = request;
+    const { orgId, keyId, message, purpose } = request;
+    const kv = this.getKV();
 
     // Verify the key exists and is active
     const metadata = await this.getKeyMetadata(orgId, keyId);
@@ -128,45 +190,70 @@ export class CloudflareKVKeyStore implements KeyStore {
       throw new Error(`Key ${keyId} is ${metadata.status}, cannot sign`);
     }
 
-    // TODO: Implement actual signing
-    // 1. Retrieve encrypted private keys from KV
-    // 2. Decrypt DEK with KEK
-    // 3. Decrypt private keys with DEK
-    // 4. Sign message with Ed25519
-    // 5. Sign (message || Ed25519 signature) with ML-DSA-65
-    // 6. Clear sensitive data from memory
+    // Get encrypted private key data
+    const encryptedData = (await kv.get(
+      this.privateKeyPath(orgId, keyId),
+      'json'
+    )) as EncryptedKeyData | null;
 
-    const timestamp = Math.floor(Date.now() / 1000);
+    if (!encryptedData) {
+      throw new Error(`Private key data not found for key ${keyId}`);
+    }
 
-    console.log(
-      `[KeyStore] Signed message with key ${keyId} for org ${orgId}, purpose: ${purpose}`
-    );
+    // Derive org key and sign
+    const orgKey = await this.getOrgKey(orgId);
 
-    // Placeholder response
-    return {
-      classicalSignature: 'PLACEHOLDER_ED25519_SIGNATURE_BASE64',
-      postQuantumSignature: 'PLACEHOLDER_MLDSA65_SIGNATURE_BASE64',
-      timestamp,
-      keyId,
-    };
+    try {
+      const { classicalSignature, postQuantumSignature } =
+        await signWithEncryptedKey(encryptedData, orgKey, message);
+
+      const timestamp = Math.floor(Date.now() / 1000);
+
+      console.log(
+        `[CloudflareKVKeyStore] Signed message with key ${keyId} for org ${orgId}, purpose: ${purpose}`
+      );
+
+      return {
+        classicalSignature,
+        postQuantumSignature,
+        timestamp,
+        keyId,
+      };
+    } finally {
+      // Clear sensitive data
+      orgKey.fill(0);
+    }
   }
 
   async rotateKeys(orgId: string): Promise<KeyRotationResult> {
+    const kv = this.getKV();
     const oldKeyId = await this.getActiveKeyId(orgId);
+
     if (!oldKeyId) {
       throw new Error(`No active key found for org ${orgId}`);
     }
 
-    // Generate new key pair
+    // Get old key metadata
+    const oldMetadata = await this.getKeyMetadata(orgId, oldKeyId);
+    if (!oldMetadata) {
+      throw new Error(`Metadata not found for key ${oldKeyId}`);
+    }
+
+    // Generate new key pair (this also updates the active key pointer)
     const newMetadata = await this.generateKeyPair(orgId);
 
     // Mark old key as rotated
-    // TODO: Update old key metadata in KV
-
     const now = new Date().toISOString();
+    oldMetadata.status = 'rotated';
+    oldMetadata.rotatedAt = now;
+
+    await kv.put(
+      this.metadataPath(orgId, oldKeyId),
+      JSON.stringify(oldMetadata)
+    );
 
     console.log(
-      `[KeyStore] Rotated keys for org ${orgId}: ${oldKeyId} -> ${newMetadata.keyId}`
+      `[CloudflareKVKeyStore] Rotated keys for org ${orgId}: ${oldKeyId} -> ${newMetadata.keyId}`
     );
 
     return {
@@ -176,46 +263,89 @@ export class CloudflareKVKeyStore implements KeyStore {
     };
   }
 
-  async listKeys(_orgId: string): Promise<KeyPairMetadata[]> {
-    // TODO: Implement KV list operation
-    // const keys = await this.getKV().list({ prefix: `keys:${orgId}:` });
+  async listKeys(orgId: string): Promise<KeyPairMetadata[]> {
+    const kv = this.getKV();
 
-    // Placeholder response
-    return [];
+    // List all keys with the org prefix
+    const prefix = `keys:${orgId}:`;
+    const listResult = await kv.list({ prefix });
+
+    // Filter for metadata keys and fetch them
+    const metadataKeys = listResult.keys.filter((key) =>
+      key.name.endsWith(':metadata')
+    );
+
+    const results: KeyPairMetadata[] = [];
+
+    for (const key of metadataKeys) {
+      const metadata = (await kv.get(
+        key.name,
+        'json'
+      )) as KeyPairMetadata | null;
+      if (metadata) {
+        results.push(metadata);
+      }
+    }
+
+    // Sort by creation date, newest first
+    results.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    return results;
   }
 
   async revokeKey(orgId: string, keyId: string, reason: string): Promise<void> {
+    const kv = this.getKV();
     const metadata = await this.getKeyMetadata(orgId, keyId);
+
     if (!metadata) {
       throw new Error(`Key ${keyId} not found for org ${orgId}`);
     }
 
-    // TODO: Update key status in KV
-    // If this was the active key, org needs to generate a new one
+    // Update key status to revoked
+    metadata.status = 'revoked';
 
-    console.log(`[KeyStore] Revoked key ${keyId} for org ${orgId}: ${reason}`);
+    await kv.put(this.metadataPath(orgId, keyId), JSON.stringify(metadata));
+
+    // If this was the active key, remove the active pointer
+    const activeKeyId = await this.getActiveKeyId(orgId);
+    if (activeKeyId === keyId) {
+      await kv.delete(this.activeKeyPath(orgId));
+    }
+
+    console.log(
+      `[CloudflareKVKeyStore] Revoked key ${keyId} for org ${orgId}: ${reason}`
+    );
   }
 
   async hasActiveKey(orgId: string): Promise<boolean> {
     const activeKeyId = await this.getActiveKeyId(orgId);
-    return activeKeyId !== null;
+    if (!activeKeyId) {
+      return false;
+    }
+
+    const metadata = await this.getKeyMetadata(orgId, activeKeyId);
+    return metadata?.status === 'active';
   }
 
   // Helper methods
 
-  private async getActiveKeyId(_orgId: string): Promise<string | null> {
-    // TODO: Implement KV lookup
-    // return await this.getKV().get(`keys:${orgId}:active`);
-    return null;
+  private async getActiveKeyId(orgId: string): Promise<string | null> {
+    const kv = this.getKV();
+    return kv.get(this.activeKeyPath(orgId));
   }
 
   private async getKeyMetadata(
-    _orgId: string,
-    _keyId: string
+    orgId: string,
+    keyId: string
   ): Promise<KeyPairMetadata | null> {
-    // TODO: Implement KV lookup
-    // return await this.getKV().get(`keys:${orgId}:${keyId}:metadata`, 'json');
-    return null;
+    const kv = this.getKV();
+    return kv.get(
+      this.metadataPath(orgId, keyId),
+      'json'
+    ) as Promise<KeyPairMetadata | null>;
   }
 }
 
@@ -224,7 +354,7 @@ export class CloudflareKVKeyStore implements KeyStore {
 declare global {
   interface KVNamespace {
     get(key: string, type?: 'text'): Promise<string | null>;
-    get(key: string, type: 'json'): Promise<unknown>;
+    get<T>(key: string, type: 'json'): Promise<T | null>;
     get(key: string, type: 'arrayBuffer'): Promise<ArrayBuffer | null>;
     put(
       key: string,
