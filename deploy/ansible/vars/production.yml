@@ -1,0 +1,27 @@
+---
+# CIRISPortal Production Environment Variables
+
+env: production
+
+# URLs
+portal_url: "https://portal.ciris.ai"
+registry_api_url: "https://api.registry.ciris.ai"
+
+# Cloudflare zone
+cloudflare_zone: "ciris.ai"
+portal_subdomain: "portal"
+
+# Feature flags
+enable_preview_deployments: true
+enable_audit_logging: true
+
+# Rate limits
+rate_limit_requests: 1000
+rate_limit_period: 60
+
+# Session settings
+session_max_age: 86400  # 24 hours
+
+# Key rotation settings
+key_rotation_warning_days: 30
+key_rotation_max_age_days: 365

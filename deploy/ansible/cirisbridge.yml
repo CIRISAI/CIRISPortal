@@ -1,0 +1,64 @@
+---
+# CIRISBridge Integration Playbook
+#
+# This playbook is designed to be called from CIRISBridge's main orchestration.
+# It expects secrets to be provided via CIRISBridge's Vault integration.
+#
+# Usage from CIRISBridge:
+#   ansible-playbook -i inventory/ciris cirisportal.yml \
+#     --extra-vars "target=portal env=production" \
+#     --vault-password-file=/path/to/vault-pass
+
+- name: CIRISPortal Deployment (CIRISBridge Integration)
+  hosts: localhost
+  connection: local
+
+  vars:
+    # These should be provided by CIRISBridge
+    cirisbridge_vault_path: "secret/data/ciris/portal"
+    cirisbridge_state_bucket: "ciris-terraform-state"
+    cirisbridge_lock_table: "ciris-terraform-locks"
+
+  pre_tasks:
+    - name: Fetch secrets from Vault
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ vault_addr }}"
+        path: "{{ cirisbridge_vault_path }}"
+        auth_method: token
+        token: "{{ vault_token }}"
+      register: portal_secrets
+      no_log: true
+      when: use_vault | default(true)
+
+    - name: Set secrets from Vault
+      set_fact:
+        cloudflare_api_token: "{{ portal_secrets.secret.cloudflare_api_token }}"
+        cloudflare_account_id: "{{ portal_secrets.secret.cloudflare_account_id }}"
+        cloudflare_zone_id: "{{ portal_secrets.secret.cloudflare_zone_id }}"
+        google_client_id: "{{ portal_secrets.secret.google_client_id }}"
+        google_client_secret: "{{ portal_secrets.secret.google_client_secret }}"
+        nextauth_secret: "{{ portal_secrets.secret.nextauth_secret }}"
+        key_encryption_key: "{{ portal_secrets.secret.key_encryption_key }}"
+      no_log: true
+      when: use_vault | default(true)
+
+  tasks:
+    - name: Include main deployment playbook
+      include_tasks: playbook.yml
+
+  post_tasks:
+    - name: Notify CIRISBridge of deployment status
+      uri:
+        url: "{{ cirisbridge_callback_url | default('https://bridge.ciris.ai/api/deployments/callback') }}"
+        method: POST
+        body_format: json
+        body:
+          project: cirisportal
+          environment: "{{ env }}"
+          status: "{{ 'success' if not ansible_failed_task else 'failed' }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          url: "https://portal.ciris.ai"
+        headers:
+          Authorization: "Bearer {{ cirisbridge_api_token }}"
+      when: cirisbridge_callback_url is defined
+      ignore_errors: true

@@ -1,0 +1,10 @@
+# CIRISPortal Production Inventory
+#
+# This playbook runs locally against Cloudflare APIs,
+# so we only need localhost.
+
+[local]
+localhost ansible_connection=local ansible_python_interpreter={{ ansible_playbook_python }}
+
+[local:vars]
+env=production

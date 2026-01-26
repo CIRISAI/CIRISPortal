@@ -1,0 +1,30 @@
+---
+# CIRISPortal Ansible Variables
+#
+# Common variables shared across all environments
+
+project_name: cirisportal
+project_repo: "https://github.com/CIRISAI/CIRISPortal.git"
+
+# Node.js version
+node_version: "18"
+
+# Cloudflare Pages settings
+pages_build_command: "npm run pages:build"
+pages_build_output: ".vercel/output/static"
+
+# KV namespace prefixes
+kv_prefix: "cirisportal"
+kv_namespaces:
+  - keys      # Custodied cryptographic keys
+  - sessions  # NextAuth sessions
+  - audit     # Audit log entries
+
+# Compatibility settings
+cloudflare_compatibility_date: "2024-01-01"
+cloudflare_compatibility_flags:
+  - nodejs_compat
+
+# Health check settings
+health_check_retries: 10
+health_check_delay: 10

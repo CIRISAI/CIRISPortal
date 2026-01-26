@@ -1,0 +1,28 @@
+---
+# CIRISPortal Staging Environment Variables
+
+env: staging
+
+# URLs
+portal_url: "https://staging.portal.ciris.ai"
+registry_api_url: "https://staging.api.registry.ciris.ai"
+
+# Cloudflare zone
+cloudflare_zone: "ciris.ai"
+portal_subdomain: "staging.portal"
+
+# Feature flags
+enable_preview_deployments: true
+enable_audit_logging: true
+enable_debug_mode: true
+
+# Rate limits (more permissive for testing)
+rate_limit_requests: 5000
+rate_limit_period: 60
+
+# Session settings
+session_max_age: 3600  # 1 hour (shorter for testing)
+
+# Key rotation settings
+key_rotation_warning_days: 7
+key_rotation_max_age_days: 30

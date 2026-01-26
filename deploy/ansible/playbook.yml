@@ -1,0 +1,256 @@
+---
+# CIRISPortal Deployment Playbook
+#
+# Orchestrates deployment of CIRISPortal to Cloudflare Pages.
+# Designed to integrate with CIRISBridge infrastructure management.
+#
+# Usage:
+#   ansible-playbook -i inventory/production playbook.yml
+#   ansible-playbook -i inventory/production playbook.yml --tags=deploy
+#   ansible-playbook -i inventory/production playbook.yml --tags=secrets
+
+- name: Deploy CIRISPortal
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars_files:
+    - vars/main.yml
+    - "vars/{{ env | default('production') }}.yml"
+    - "{{ secrets_file | default('secrets/secrets.yml') }}"
+
+  vars:
+    project_name: cirisportal
+    project_dir: "{{ playbook_dir }}/../.."
+    terraform_dir: "{{ playbook_dir }}/../terraform"
+
+  tasks:
+    # =========================================================================
+    # PREREQUISITES
+    # =========================================================================
+
+    - name: Verify required tools are installed
+      tags: [always]
+      block:
+        - name: Check for Terraform
+          command: terraform version
+          register: tf_version
+          changed_when: false
+
+        - name: Check for Node.js
+          command: node --version
+          register: node_version
+          changed_when: false
+
+        - name: Check for wrangler
+          command: npx wrangler --version
+          register: wrangler_version
+          changed_when: false
+
+        - name: Display versions
+          debug:
+            msg: |
+              Terraform: {{ tf_version.stdout_lines[0] }}
+              Node.js: {{ node_version.stdout }}
+              Wrangler: {{ wrangler_version.stdout }}
+
+    # =========================================================================
+    # TERRAFORM INFRASTRUCTURE
+    # =========================================================================
+
+    - name: Provision Cloudflare infrastructure
+      tags: [infra, terraform]
+      block:
+        - name: Initialize Terraform
+          command: terraform init
+          args:
+            chdir: "{{ terraform_dir }}"
+          register: tf_init
+          changed_when: "'Terraform has been successfully initialized' in tf_init.stdout"
+
+        - name: Generate Terraform vars file
+          template:
+            src: templates/terraform.tfvars.j2
+            dest: "{{ terraform_dir }}/terraform.tfvars"
+            mode: '0600'
+          no_log: true
+
+        - name: Plan Terraform changes
+          command: terraform plan -out=tfplan -var-file=terraform.tfvars
+          args:
+            chdir: "{{ terraform_dir }}"
+          register: tf_plan
+          changed_when: "'No changes' not in tf_plan.stdout"
+
+        - name: Apply Terraform changes
+          command: terraform apply -auto-approve tfplan
+          args:
+            chdir: "{{ terraform_dir }}"
+          register: tf_apply
+          when: tf_plan.changed or force_apply | default(false)
+
+        - name: Get Terraform outputs
+          command: terraform output -json
+          args:
+            chdir: "{{ terraform_dir }}"
+          register: tf_outputs
+          changed_when: false
+
+        - name: Parse Terraform outputs
+          set_fact:
+            infra: "{{ tf_outputs.stdout | from_json }}"
+
+    # =========================================================================
+    # BUILD APPLICATION
+    # =========================================================================
+
+    - name: Build CIRISPortal
+      tags: [build]
+      block:
+        - name: Install dependencies
+          command: npm ci
+          args:
+            chdir: "{{ project_dir }}"
+          register: npm_install
+          changed_when: "'added' in npm_install.stdout"
+
+        - name: Run type check
+          command: npm run type-check
+          args:
+            chdir: "{{ project_dir }}"
+          changed_when: false
+
+        - name: Run linter
+          command: npm run lint
+          args:
+            chdir: "{{ project_dir }}"
+          changed_when: false
+          ignore_errors: "{{ skip_lint | default(false) }}"
+
+        - name: Build for Cloudflare Pages
+          command: npm run pages:build
+          args:
+            chdir: "{{ project_dir }}"
+          environment:
+            NEXT_PUBLIC_API_URL: "{{ registry_api_url }}"
+            NODE_ENV: production
+
+    # =========================================================================
+    # DEPLOY TO CLOUDFLARE
+    # =========================================================================
+
+    - name: Deploy to Cloudflare Pages
+      tags: [deploy]
+      block:
+        - name: Deploy using wrangler
+          command: npx wrangler pages deploy .vercel/output/static --project-name={{ project_name }}
+          args:
+            chdir: "{{ project_dir }}"
+          environment:
+            CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+            CLOUDFLARE_ACCOUNT_ID: "{{ cloudflare_account_id }}"
+          register: deploy_result
+
+        - name: Display deployment URL
+          debug:
+            msg: |
+              Deployment complete!
+              Production URL: https://portal.ciris.ai
+              Deployment URL: {{ deploy_result.stdout | regex_search('https://[a-z0-9-]+\.cirisportal\.pages\.dev') }}
+
+    # =========================================================================
+    # SECRETS MANAGEMENT
+    # =========================================================================
+
+    - name: Update Cloudflare secrets
+      tags: [secrets]
+      block:
+        - name: Set GOOGLE_CLIENT_ID secret
+          command: >
+            npx wrangler pages secret put GOOGLE_CLIENT_ID
+            --project-name={{ project_name }}
+          args:
+            chdir: "{{ project_dir }}"
+            stdin: "{{ google_client_id }}"
+          environment:
+            CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+          no_log: true
+          changed_when: true
+
+        - name: Set GOOGLE_CLIENT_SECRET secret
+          command: >
+            npx wrangler pages secret put GOOGLE_CLIENT_SECRET
+            --project-name={{ project_name }}
+          args:
+            chdir: "{{ project_dir }}"
+            stdin: "{{ google_client_secret }}"
+          environment:
+            CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+          no_log: true
+          changed_when: true
+
+        - name: Set NEXTAUTH_SECRET secret
+          command: >
+            npx wrangler pages secret put NEXTAUTH_SECRET
+            --project-name={{ project_name }}
+          args:
+            chdir: "{{ project_dir }}"
+            stdin: "{{ nextauth_secret }}"
+          environment:
+            CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+          no_log: true
+          changed_when: true
+
+        - name: Set KEY_ENCRYPTION_KEY secret
+          command: >
+            npx wrangler pages secret put KEY_ENCRYPTION_KEY
+            --project-name={{ project_name }}
+          args:
+            chdir: "{{ project_dir }}"
+            stdin: "{{ key_encryption_key }}"
+          environment:
+            CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+          no_log: true
+          changed_when: true
+
+    # =========================================================================
+    # VERIFICATION
+    # =========================================================================
+
+    - name: Verify deployment
+      tags: [verify]
+      block:
+        - name: Wait for deployment to be live
+          uri:
+            url: "https://portal.ciris.ai"
+            method: GET
+            status_code: [200, 302]
+          register: health_check
+          retries: 10
+          delay: 10
+          until: health_check.status in [200, 302]
+
+        - name: Check API connectivity
+          uri:
+            url: "{{ registry_api_url }}/health"
+            method: GET
+            status_code: 200
+          register: api_check
+          ignore_errors: true
+
+        - name: Deployment summary
+          debug:
+            msg: |
+              ============================================
+              CIRISPortal Deployment Complete
+              ============================================
+              Environment: {{ env | default('production') }}
+              Portal URL: https://portal.ciris.ai
+              API Status: {{ 'OK' if api_check.status == 200 else 'UNAVAILABLE' }}
+              ============================================
+
+  handlers:
+    - name: Cleanup Terraform plan
+      file:
+        path: "{{ terraform_dir }}/tfplan"
+        state: absent
