@@ -7,6 +7,7 @@ import { TEST_ORG_ID, TEST_SECONDARY_ORG_ID } from '../test-config';
 import {
   provisionUser,
   getFallbackUserInfo,
+  checkUserExists,
   ProvisioningError,
   type UserRole,
   type ProvisionedUser,
@@ -258,21 +259,35 @@ export const authOptions: NextAuthOptions = {
         return true;
       }
 
-      // Check domain restrictions in prod
-      if (
-        authConfig.allowedDomains.length > 0 &&
-        !authConfig.allowedDomains.includes('*')
-      ) {
-        const email = user.email ?? '';
-        const domain = email.split('@')[1];
-        if (!authConfig.allowedDomains.includes(domain)) {
-          console.warn(
-            `[Auth] Rejected login from unauthorized domain: ${domain}`
-          );
-          return false;
-        }
+      // In devtest, allow all domains
+      if (authConfig.allowedDomains.includes('*')) {
+        return true;
       }
 
+      const email = user.email ?? '';
+      const domain = email.split('@')[1]?.toLowerCase();
+
+      if (!domain) {
+        console.warn('[Auth] Rejected login: invalid email');
+        return false;
+      }
+
+      // Always allow CIRIS internal domain
+      if (domain === 'ciris.ai') {
+        return true;
+      }
+
+      // For other domains, check if user exists in registry
+      // (must be pre-added by an admin)
+      const userExists = await checkUserExists(email);
+      if (!userExists) {
+        console.warn(
+          `[Auth] Rejected login: ${email} not found in registry (must be pre-added)`
+        );
+        return false;
+      }
+
+      console.log(`[Auth] Allowing login for pre-registered user: ${email}`);
       return true;
     },
   },

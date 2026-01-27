@@ -12,7 +12,7 @@ import {
   Key,
   ScrollText,
   FileCheck,
-  Settings,
+  User,
   Webhook,
   Bot,
   ShieldAlert,
@@ -77,10 +77,10 @@ const navigation: NavItem[] = [
     roles: ['admin', 'partner'], // Admin and Partner
   },
   {
-    name: 'Settings',
+    name: 'Account',
     href: '/settings',
-    icon: Settings,
-    // All roles can access settings
+    icon: User,
+    // All roles can access their account
   },
 ];
 

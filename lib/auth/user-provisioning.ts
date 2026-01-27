@@ -88,6 +88,42 @@ function domainToOrgId(domain: string): string {
 }
 
 /**
+ * Check if a user exists in the registry
+ *
+ * Used during signIn to verify non-CIRIS users have been pre-added.
+ * Returns true if:
+ * - User is from @ciris.ai (always allowed)
+ * - User exists in their domain's organization
+ */
+export async function checkUserExists(email: string): Promise<boolean> {
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (!domain) return false;
+
+  // CIRIS internal users are always allowed
+  if (domain === CIRIS_ORG.domain) {
+    return true;
+  }
+
+  // For other domains, check if user exists in registry
+  const orgId = domainToOrgId(domain);
+
+  try {
+    const response = await getOrgUserByEmail({ orgId, email });
+    return !!response.user;
+  } catch (error) {
+    // User not found or org doesn't exist
+    const err = error as { code?: number; message?: string };
+    if (err.code === 5 || err.message?.includes('not found')) {
+      console.log(`[Auth] User ${email} not found in registry`);
+      return false;
+    }
+    // On other errors, log and deny for safety
+    console.error(`[Auth] Error checking user ${email}:`, error);
+    return false;
+  }
+}
+
+/**
  * User info returned after provisioning
  */
 export interface ProvisionedUser {
