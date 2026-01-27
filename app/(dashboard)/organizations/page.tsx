@@ -33,7 +33,7 @@ async function fetchOrganizations(): Promise<ListOrganizationsResponse> {
 async function createOrganization(data: {
   name: string;
   primaryEmail: string;
-  oauthDomain: string;
+  oauthDomain?: string;
 }): Promise<Organization> {
   const res = await fetch('/api/registry/organizations', {
     method: 'POST',
@@ -88,7 +88,11 @@ function CreateOrgDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    mutation.mutate({ name, primaryEmail, oauthDomain });
+    mutation.mutate({
+      name,
+      primaryEmail,
+      ...(oauthDomain && { oauthDomain }),
+    });
   };
 
   if (!open) return null;
@@ -140,7 +144,7 @@ function CreateOrgDialog({
 
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              OAuth Domain
+              OAuth Domain (optional)
             </label>
             <input
               type="text"
@@ -148,10 +152,10 @@ function CreateOrgDialog({
               onChange={(e) => setOauthDomain(e.target.value)}
               className="mt-1 w-full rounded-lg border px-3 py-2"
               placeholder="acme.com"
-              required
             />
             <p className="mt-1 text-xs text-gray-500">
-              Users with this email domain can log in to this organization
+              If set, users with this domain auto-join. For personal emails
+              (Gmail, etc.), leave blank and add users individually.
             </p>
           </div>
 

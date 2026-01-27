@@ -42,15 +42,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, primaryEmail, oauthDomain, legalName } = body;
 
-    if (!name || !primaryEmail || !oauthDomain) {
+    if (!name || !primaryEmail) {
       return NextResponse.json(
-        { error: 'Missing required fields: name, primaryEmail, oauthDomain' },
+        { error: 'Missing required fields: name, primaryEmail' },
         { status: 400 }
       );
     }
 
-    // Generate org ID from domain
-    const orgId = `org-${oauthDomain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    // Generate org ID from domain if provided, otherwise from name
+    const orgId = oauthDomain
+      ? `org-${oauthDomain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+      : `org-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
 
     const response = await createOrganization({
       organization: {
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
         legalName,
         primaryEmail,
         oauthProvider: 'google',
-        oauthDomain,
+        oauthDomain: oauthDomain || undefined,
         active: true,
         metadata: {
           createdVia: 'portal',
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
       orgId,
       name,
       primaryEmail,
-      oauthDomain,
+      oauthDomain: oauthDomain || null,
       active: true,
       createdAt: new Date().toISOString(),
     });
