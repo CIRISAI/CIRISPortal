@@ -556,11 +556,11 @@ export async function signWithEncryptedKey(
  * In production, this should be a 256-bit key stored as a Cloudflare secret
  */
 export function getMasterKEK(): Uint8Array {
-  const masterKeyBase64 = process.env.MASTER_KEK;
+  const masterKeyBase64 = process.env.KEY_ENCRYPTION_KEY;
 
   if (!masterKeyBase64) {
     throw new Error(
-      'MASTER_KEK environment variable not set. ' +
+      'KEY_ENCRYPTION_KEY environment variable not set. ' +
         'Generate a 256-bit key: openssl rand -base64 32'
     );
   }
@@ -569,7 +569,7 @@ export function getMasterKEK(): Uint8Array {
 
   if (masterKey.length !== 32) {
     throw new Error(
-      `MASTER_KEK must be 256 bits (32 bytes). Got ${masterKey.length} bytes.`
+      `KEY_ENCRYPTION_KEY must be 256 bits (32 bytes). Got ${masterKey.length} bytes.`
     );
   }
 

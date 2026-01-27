@@ -1,26 +1,80 @@
+# ===========================================
+# CIRISPortal - Cloudflare Pages Configuration
+# ===========================================
+
 name = "cirisportal"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Pages configuration
+# Pages build output directory (for @cloudflare/next-on-pages)
 pages_build_output_dir = ".vercel/output/static"
 
-# KV Namespace for key storage (create with: wrangler kv:namespace create KEYS)
+# ===========================================
+# KV Namespace for Key Storage
+# ===========================================
+# Create with: wrangler kv:namespace create KEYS
+# Uncomment after creating namespace:
 # [[kv_namespaces]]
 # binding = "KEYS"
 # id = "your-kv-namespace-id"
 
-# Environment variables
-[vars]
-NEXT_PUBLIC_API_URL = "https://api.registry.ciris.ai"
+# ===========================================
+# Development Environment
+# ===========================================
+[env.development]
+name = "cirisportal-dev"
 
-# Environment variables (for production)
+[env.development.vars]
+APP_ENV = "devtest"
+NEXT_PUBLIC_APP_ENV = "devtest"
+NEXT_PUBLIC_REGISTRY_API_URL = "/api/registry"
+REGISTRY_GRPC_URL = "localhost:50052"
+NEXTAUTH_URL = "http://localhost:3000"
+
+# ===========================================
+# Staging Environment
+# ===========================================
+[env.staging]
+name = "cirisportal-staging"
+
+[env.staging.vars]
+APP_ENV = "stage"
+NEXT_PUBLIC_APP_ENV = "stage"
+NEXT_PUBLIC_REGISTRY_API_URL = "/api/registry"
+REGISTRY_GRPC_URL = "registry-staging.ciris.ai:50052"
+NEXTAUTH_URL = "https://portal-staging.ciris.ai"
+
+# ===========================================
+# Production Environment
+# ===========================================
+[env.production]
+name = "cirisportal"
+
 [env.production.vars]
-NEXT_PUBLIC_API_URL = "https://api.registry.ciris.ai"
+APP_ENV = "prod"
+NEXT_PUBLIC_APP_ENV = "prod"
+NEXT_PUBLIC_REGISTRY_API_URL = "/api/registry"
+REGISTRY_GRPC_URL = "registry.ciris.ai:50052"
 NEXTAUTH_URL = "https://portal.ciris.ai"
+ALLOWED_EMAIL_DOMAINS = "ciris.ai"
 
-# Secrets (set with: wrangler secret put <KEY>)
-# - NEXTAUTH_SECRET
-# - GOOGLE_CLIENT_ID
-# - GOOGLE_CLIENT_SECRET
-# - KEY_ENCRYPTION_KEY (for envelope encryption of custodied keys)
+# ===========================================
+# Secrets (all environments)
+# ===========================================
+# Set secrets using wrangler CLI:
+#
+# Development/Staging:
+#   wrangler secret put NEXTAUTH_SECRET --env staging
+#   wrangler secret put GOOGLE_CLIENT_ID --env staging
+#   wrangler secret put GOOGLE_CLIENT_SECRET --env staging
+#   wrangler secret put KEY_ENCRYPTION_KEY --env staging
+#
+# Production:
+#   wrangler secret put NEXTAUTH_SECRET --env production
+#   wrangler secret put GOOGLE_CLIENT_ID --env production
+#   wrangler secret put GOOGLE_CLIENT_SECRET --env production
+#   wrangler secret put KEY_ENCRYPTION_KEY --env production
+#
+# Generate secrets:
+#   NEXTAUTH_SECRET: openssl rand -base64 32
+#   KEY_ENCRYPTION_KEY: openssl rand -base64 32
