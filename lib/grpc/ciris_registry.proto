@@ -309,6 +309,7 @@ enum AgentStatus {
 message AgentRecord {
   // Identity
   bytes agent_hash = 1;               // SHA-256 of canonical agent build (32 bytes)
+  string agent_hash_hex = 4;          // Hex-encoded agent_hash for display (64 chars)
   AgentType agent_type = 2;
   SemanticVersion version = 3;
 

@@ -58,6 +58,7 @@ import { toast } from '@/lib/hooks/use-toast';
 // Types
 interface AgentRecord {
   agentHash: string;
+  agentHashHex?: string; // New field from backend
   agentType: string;
   version: {
     major: number;
@@ -70,6 +71,28 @@ interface AgentRecord {
   registeredAt: string;
   hasAttestation: boolean;
   attestation?: BuildAttestation;
+}
+
+// Helper to extract hex hash from various formats
+function getAgentHashHex(agent: any): string {
+  // Prefer agentHashHex if available
+  if (agent.agentHashHex && typeof agent.agentHashHex === 'string') {
+    return agent.agentHashHex;
+  }
+  // Handle Buffer format from gRPC
+  if (
+    agent.agentHash?.type === 'Buffer' &&
+    Array.isArray(agent.agentHash.data)
+  ) {
+    return agent.agentHash.data
+      .map((b: number) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  // String format
+  if (typeof agent.agentHash === 'string') {
+    return agent.agentHash;
+  }
+  return '';
 }
 
 interface BuildAttestation {
@@ -851,9 +874,17 @@ async function fetchAgents(): Promise<AgentsResponse> {
     );
   }
 
+  // Normalize agent data - convert hash to hex string
+  const agents = (data.agents || []).map((agent: any) => ({
+    ...agent,
+    agentHash: getAgentHashHex(agent),
+    status: agent.status || 'AGENT_STATUS_REGISTERED',
+    capabilities: agent.capabilities || agent.baseCapabilities || [],
+  }));
+
   return {
-    agents: data.agents || [],
-    totalCount: data.totalCount || data.agents?.length || 0,
+    agents,
+    totalCount: data.totalCount || agents.length,
     stats: data.stats,
   };
 }
