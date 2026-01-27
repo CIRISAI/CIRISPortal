@@ -432,3 +432,132 @@ export async function getMetrics(): Promise<any> {
     context: buildContext(),
   });
 }
+
+// ============================================================================
+// Registry Admin Service Methods
+// ============================================================================
+
+let adminClient: any = null;
+
+function getAdminClient(): any {
+  if (!adminClient) {
+    const RegistryAdminService =
+      protoDescriptor.ciris.registry.v1.RegistryAdminService;
+    const registryUrl = process.env.REGISTRY_GRPC_URL || 'localhost:50052';
+    adminClient = new RegistryAdminService(
+      registryUrl,
+      grpc.credentials.createInsecure()
+    );
+  }
+  return adminClient;
+}
+
+// Agent Management
+export async function registerAgent(params: {
+  agentHash: string;
+  agentType: string;
+  version: { major: number; minor: number; patch: number };
+  capabilities: string[];
+  maxAutonomyTier?: string;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'registerAgent', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+export async function batchRegisterAgents(params: {
+  agents: Array<{
+    agentHash: string;
+    agentType: string;
+    version: { major: number; minor: number; patch: number };
+    capabilities: string[];
+    maxAutonomyTier?: string;
+  }>;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'batchRegisterAgents', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+// Emergency Response
+export async function setEmergencyShutdown(params: {
+  severity: string;
+  reason: string;
+  durationSeconds?: number;
+  allowedOperations?: string[];
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'setEmergencyShutdown', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+export async function clearEmergencyShutdown(): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'clearEmergencyShutdown', {
+    context: buildContext(),
+  });
+}
+
+export async function massRevoke(params: {
+  agentHashes?: string[];
+  partnerIds?: string[];
+  versionPattern?: string;
+  agentType?: string;
+  reason: string;
+  reasonCode: string;
+  severity: string;
+  isDryRun?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'massRevoke', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+// Webhook Management
+export async function registerWebhook(params: {
+  orgId: string;
+  url: string;
+  events: string[];
+  secret?: string;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'registerWebhook', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+export async function listWebhooks(params: {
+  orgId: string;
+  pageSize?: number;
+  pageToken?: string;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'listWebhooks', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+export async function deleteWebhook(params: {
+  orgId: string;
+  webhookId: string;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'deleteWebhook', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+// License Management
+export async function listExpiringLicenses(params: {
+  withinDays?: number;
+  pageSize?: number;
+  pageToken?: string;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'listExpiringLicenses', {
+    context: buildContext(),
+    ...params,
+  });
+}

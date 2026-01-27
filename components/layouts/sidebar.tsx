@@ -12,6 +12,10 @@ import {
   ScrollText,
   FileCheck,
   Settings,
+  Webhook,
+  Bot,
+  ShieldAlert,
+  BadgeCheck,
 } from 'lucide-react';
 
 const navigation = [
@@ -41,6 +45,11 @@ const navigation = [
     icon: Key,
   },
   {
+    name: 'Webhooks',
+    href: '/webhooks',
+    icon: Webhook,
+  },
+  {
     name: 'Audit Log',
     href: '/audit',
     icon: ScrollText,
@@ -54,6 +63,24 @@ const navigation = [
     name: 'Settings',
     href: '/settings',
     icon: Settings,
+  },
+];
+
+const adminNavigation = [
+  {
+    name: 'Partner Licenses',
+    href: '/admin/partners',
+    icon: BadgeCheck,
+  },
+  {
+    name: 'Agent Registry',
+    href: '/admin/agents',
+    icon: Bot,
+  },
+  {
+    name: 'Incident Response',
+    href: '/admin/incidents',
+    icon: ShieldAlert,
   },
 ];
 
@@ -71,7 +98,7 @@ export function Sidebar() {
         </Link>
       </div>
 
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {navigation.map((item) => {
           const isActive =
             pathname === item.href || pathname?.startsWith(item.href + '/');
@@ -93,6 +120,34 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Admin Section */}
+        <div className="mt-6 border-t pt-4">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Admin
+          </p>
+          {adminNavigation.map((item) => {
+            const isActive =
+              pathname === item.href || pathname?.startsWith(item.href + '/');
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-red-50 text-red-700'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {item.name}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       <div className="border-t p-4">
