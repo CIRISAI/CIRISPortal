@@ -1,1 +1,12 @@
+#!/bin/sh
+
+# Run lint-staged (eslint + prettier on staged files)
 npm run precommit
+
+# Run TypeScript type checking
+echo "Running TypeScript check..."
+npm run type-check
+
+# Uncomment below to also run a full build (slower but catches more issues)
+# echo "Running build..."
+# npm run build
