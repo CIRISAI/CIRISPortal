@@ -568,6 +568,16 @@ export async function listExpiringLicenses(params: {
   });
 }
 
+// Partner Activity
+export async function getPartnerActivity(params: {
+  partnerId: string;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'getPartnerActivity', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
 // Agent Registry
 export async function listRegisteredAgents(params: {
   agentType?: string;
