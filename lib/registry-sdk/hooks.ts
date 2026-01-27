@@ -1,7 +1,7 @@
 /**
  * Registry SDK React Query Hooks
  *
- * React Query hooks for interacting with the CIRIS Registry API
+ * React Query hooks for interacting with the CIRIS Registry API v1.1.0
  */
 
 'use client';
@@ -13,6 +13,7 @@ import {
   type UseQueryOptions,
   type UseMutationOptions,
 } from '@tanstack/react-query';
+
 import {
   RegistryClient,
   getRegistryClient,
@@ -20,17 +21,56 @@ import {
   RegistryApiError,
   RegistryNetworkError,
 } from './client';
+
 import type {
+  // Core types
   Organization,
-  Partner,
   OrgUser,
+  PartnerKeyRecord,
   AuditEntry,
+  PartnerRecord,
+  KeyEscrow,
+  WebhookConfig,
+  ComplianceReport,
+  HealthCheckResponse,
+  MetricsResponse,
+  PartnerActivityResponse,
+  EmergencyStatusResponse,
+  // Request types
   CreateOrganizationRequest,
-  CreatePartnerRequest,
-  InviteUserRequest,
+  UpdateOrganizationRequest,
+  CreateOrgUserRequest,
+  UpdateOrgUserRequest,
+  GenerateKeyPairRequest,
+  RotateKeyRequest,
+  RevokeKeyRequest,
+  RequestKeyEscrowRequest,
+  RequestKeyRecoveryRequest,
   AuditLogFilters,
+  ExportAuditLogRequest,
+  GenerateComplianceReportRequest,
+  RegisterWebhookRequest,
+  ListKeysRequest,
+  ListOrgUsersRequest,
+  ListOrganizationsRequest,
+  ListExpiringLicensesRequest,
+  // Response types
   PaginatedResponse,
+  AdminResponse,
+  RotateKeyResponse,
+  KeyEscrowResponse,
+  KeyRecoveryResponse,
+  ExportAuditLogResponse,
+  ListWebhooksResponse,
+  ListExpiringLicensesResponse,
+} from './types';
+
+import {
   OrgRole,
+  KeyRotationMode,
+  KeyEscrowType,
+  ComplianceFramework,
+  AuditExportFormat,
 } from './types';
 
 // ============================================================================
@@ -43,37 +83,76 @@ import type {
 export const registryKeys = {
   all: ['registry'] as const,
 
+  // Health & Monitoring
+  health: () => [...registryKeys.all, 'health'] as const,
+  healthCheck: (includeDiagnostics?: boolean) =>
+    [...registryKeys.health(), { includeDiagnostics }] as const,
+  metrics: (timeRangeMinutes?: number) =>
+    [...registryKeys.health(), 'metrics', { timeRangeMinutes }] as const,
+  emergency: () => [...registryKeys.all, 'emergency'] as const,
+
   // Organizations
   organizations: () => [...registryKeys.all, 'organizations'] as const,
-  organization: (id: string) => [...registryKeys.organizations(), id] as const,
-
-  // Partners
-  partners: () => [...registryKeys.all, 'partners'] as const,
-  partnersList: (orgId?: string) =>
-    [...registryKeys.partners(), 'list', { orgId }] as const,
-  partner: (id: string) => [...registryKeys.partners(), id] as const,
+  organizationsList: (params?: ListOrganizationsRequest) =>
+    [...registryKeys.organizations(), 'list', params] as const,
+  organization: (orgId: string) =>
+    [...registryKeys.organizations(), orgId] as const,
 
   // Users
   users: () => [...registryKeys.all, 'users'] as const,
-  orgUsers: (orgId: string) => [...registryKeys.users(), 'org', orgId] as const,
+  orgUsers: (orgId: string, params?: Omit<ListOrgUsersRequest, 'orgId'>) =>
+    [...registryKeys.users(), 'org', orgId, params] as const,
+  user: (userId: string) => [...registryKeys.users(), userId] as const,
+  userByEmail: (email: string) =>
+    [...registryKeys.users(), 'email', email] as const,
+
+  // Keys
+  keys: () => [...registryKeys.all, 'keys'] as const,
+  orgKeys: (orgId: string, params?: Omit<ListKeysRequest, 'orgId'>) =>
+    [...registryKeys.keys(), 'org', orgId, params] as const,
+  key: (orgId: string, keyId: string) =>
+    [...registryKeys.keys(), orgId, keyId] as const,
+
+  // Key Escrows
+  escrows: () => [...registryKeys.all, 'escrows'] as const,
+  orgEscrows: (orgId: string) =>
+    [...registryKeys.escrows(), 'org', orgId] as const,
+
+  // Partners
+  partners: () => [...registryKeys.all, 'partners'] as const,
+  partner: (partnerId: string) =>
+    [...registryKeys.partners(), partnerId] as const,
+  partnerActivity: (partnerId: string) =>
+    [...registryKeys.partners(), partnerId, 'activity'] as const,
+
+  // Licenses
+  licenses: () => [...registryKeys.all, 'licenses'] as const,
+  expiringLicenses: (params?: ListExpiringLicensesRequest) =>
+    [...registryKeys.licenses(), 'expiring', params] as const,
 
   // Audit
   audit: () => [...registryKeys.all, 'audit'] as const,
   auditLog: (filters?: AuditLogFilters) =>
     [...registryKeys.audit(), 'log', filters] as const,
-  auditEntry: (id: string) => [...registryKeys.audit(), id] as const,
+
+  // Compliance
+  compliance: () => [...registryKeys.all, 'compliance'] as const,
+  complianceReport: (params: GenerateComplianceReportRequest) =>
+    [...registryKeys.compliance(), 'report', params] as const,
+
+  // Webhooks
+  webhooks: () => [...registryKeys.all, 'webhooks'] as const,
 };
 
 // ============================================================================
 // Client Context
 // ============================================================================
 
-/**
- * Get or create a Registry client
- * In a real app, you might want to use React Context to provide the client
- */
 let clientInstance: RegistryClient | null = null;
 
+/**
+ * Get or create a Registry client
+ */
 export function useRegistryClient(
   config?: RegistryClientConfig
 ): RegistryClient {
@@ -84,34 +163,104 @@ export function useRegistryClient(
 }
 
 // ============================================================================
-// Organization Hooks
+// Error Type
 // ============================================================================
 
 type RegistryError = RegistryApiError | RegistryNetworkError;
 
+// ============================================================================
+// Health & Monitoring Hooks
+// ============================================================================
+
 /**
- * Hook to fetch all organizations
+ * Hook to check registry health
  */
-export function useOrganizations(
+export function useHealthCheck(
+  includeDiagnostics = false,
   options?: Omit<
-    UseQueryOptions<Organization[], RegistryError>,
+    UseQueryOptions<HealthCheckResponse, RegistryError>,
     'queryKey' | 'queryFn'
   >
 ) {
   const client = useRegistryClient();
 
-  return useQuery<Organization[], RegistryError>({
-    queryKey: registryKeys.organizations(),
-    queryFn: () => client.getOrganizations(),
+  return useQuery<HealthCheckResponse, RegistryError>({
+    queryKey: registryKeys.healthCheck(includeDiagnostics),
+    queryFn: () => client.healthCheck(includeDiagnostics),
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 30 * 1000, // Auto-refresh every 30s
     ...options,
   });
 }
 
 /**
- * Hook to fetch a single organization by ID
+ * Hook to get registry metrics
+ */
+export function useMetrics(
+  timeRangeMinutes = 60,
+  options?: Omit<
+    UseQueryOptions<MetricsResponse, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<MetricsResponse, RegistryError>({
+    queryKey: registryKeys.metrics(timeRangeMinutes),
+    queryFn: () => client.getMetrics(timeRangeMinutes),
+    staleTime: 60 * 1000, // 1 minute
+    ...options,
+  });
+}
+
+/**
+ * Hook to get emergency status
+ */
+export function useEmergencyStatus(
+  options?: Omit<
+    UseQueryOptions<EmergencyStatusResponse, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<EmergencyStatusResponse, RegistryError>({
+    queryKey: registryKeys.emergency(),
+    queryFn: () => client.getEmergencyStatus(),
+    staleTime: 10 * 1000, // 10 seconds
+    ...options,
+  });
+}
+
+// ============================================================================
+// Organization Hooks
+// ============================================================================
+
+/**
+ * Hook to fetch organizations
+ */
+export function useOrganizations(
+  params?: ListOrganizationsRequest,
+  options?: Omit<
+    UseQueryOptions<PaginatedResponse<Organization>, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<PaginatedResponse<Organization>, RegistryError>({
+    queryKey: registryKeys.organizationsList(params),
+    queryFn: () => client.getOrganizations(params),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to fetch a single organization
  */
 export function useOrganization(
-  id: string,
+  orgId: string,
   options?: Omit<
     UseQueryOptions<Organization, RegistryError>,
     'queryKey' | 'queryFn'
@@ -120,34 +269,32 @@ export function useOrganization(
   const client = useRegistryClient();
 
   return useQuery<Organization, RegistryError>({
-    queryKey: registryKeys.organization(id),
-    queryFn: () => client.getOrganization(id),
-    enabled: !!id,
+    queryKey: registryKeys.organization(orgId),
+    queryFn: () => client.getOrganization(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
     ...options,
   });
 }
 
 /**
- * Hook to create a new organization
+ * Hook to create an organization
  */
 export function useCreateOrganization(
   options?: Omit<
-    UseMutationOptions<Organization, RegistryError, CreateOrganizationRequest>,
+    UseMutationOptions<AdminResponse, RegistryError, CreateOrganizationRequest>,
     'mutationFn'
   >
 ) {
   const client = useRegistryClient();
   const queryClient = useQueryClient();
 
-  return useMutation<Organization, RegistryError, CreateOrganizationRequest>({
+  return useMutation<AdminResponse, RegistryError, CreateOrganizationRequest>({
     mutationFn: (data) => client.createOrganization(data),
-    onSuccess: (newOrg) => {
-      // Invalidate the organizations list
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: registryKeys.organizations(),
       });
-      // Optionally pre-populate the individual org cache
-      queryClient.setQueryData(registryKeys.organization(newOrg.id), newOrg);
     },
     ...options,
   });
@@ -158,212 +305,22 @@ export function useCreateOrganization(
  */
 export function useUpdateOrganization(
   options?: Omit<
-    UseMutationOptions<
-      Organization,
-      RegistryError,
-      { id: string; data: Partial<CreateOrganizationRequest> }
-    >,
+    UseMutationOptions<AdminResponse, RegistryError, UpdateOrganizationRequest>,
     'mutationFn'
   >
 ) {
   const client = useRegistryClient();
   const queryClient = useQueryClient();
 
-  return useMutation<
-    Organization,
-    RegistryError,
-    { id: string; data: Partial<CreateOrganizationRequest> }
-  >({
-    mutationFn: ({ id, data }) => client.updateOrganization(id, data),
-    onSuccess: (updatedOrg) => {
+  return useMutation<AdminResponse, RegistryError, UpdateOrganizationRequest>({
+    mutationFn: (data) => client.updateOrganization(data),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: registryKeys.organizations(),
       });
-      queryClient.setQueryData(
-        registryKeys.organization(updatedOrg.id),
-        updatedOrg
-      );
-    },
-    ...options,
-  });
-}
-
-/**
- * Hook to delete an organization
- */
-export function useDeleteOrganization(
-  options?: Omit<UseMutationOptions<void, RegistryError, string>, 'mutationFn'>
-) {
-  const client = useRegistryClient();
-  const queryClient = useQueryClient();
-
-  return useMutation<void, RegistryError, string>({
-    mutationFn: (id) => client.deleteOrganization(id),
-    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({
-        queryKey: registryKeys.organizations(),
+        queryKey: registryKeys.organization(variables.organization.orgId),
       });
-      queryClient.removeQueries({
-        queryKey: registryKeys.organization(id),
-      });
-    },
-    ...options,
-  });
-}
-
-// ============================================================================
-// Partner Hooks
-// ============================================================================
-
-/**
- * Hook to fetch partners, optionally filtered by organization
- */
-export function usePartners(
-  orgId?: string,
-  options?: Omit<
-    UseQueryOptions<Partner[], RegistryError>,
-    'queryKey' | 'queryFn'
-  >
-) {
-  const client = useRegistryClient();
-
-  return useQuery<Partner[], RegistryError>({
-    queryKey: registryKeys.partnersList(orgId),
-    queryFn: () => client.getPartners(orgId),
-    ...options,
-  });
-}
-
-/**
- * Hook to fetch a single partner by ID
- */
-export function usePartner(
-  id: string,
-  options?: Omit<
-    UseQueryOptions<Partner, RegistryError>,
-    'queryKey' | 'queryFn'
-  >
-) {
-  const client = useRegistryClient();
-
-  return useQuery<Partner, RegistryError>({
-    queryKey: registryKeys.partner(id),
-    queryFn: () => client.getPartner(id),
-    enabled: !!id,
-    ...options,
-  });
-}
-
-/**
- * Hook to create a new partner
- */
-export function useCreatePartner(
-  options?: Omit<
-    UseMutationOptions<Partner, RegistryError, CreatePartnerRequest>,
-    'mutationFn'
-  >
-) {
-  const client = useRegistryClient();
-  const queryClient = useQueryClient();
-
-  return useMutation<Partner, RegistryError, CreatePartnerRequest>({
-    mutationFn: (data) => client.createPartner(data),
-    onSuccess: (newPartner) => {
-      // Invalidate all partner lists (the new partner could appear in multiple filtered views)
-      queryClient.invalidateQueries({
-        queryKey: registryKeys.partners(),
-      });
-      // Pre-populate the individual partner cache
-      queryClient.setQueryData(registryKeys.partner(newPartner.id), newPartner);
-    },
-    ...options,
-  });
-}
-
-/**
- * Hook to update a partner
- */
-export function useUpdatePartner(
-  options?: Omit<
-    UseMutationOptions<
-      Partner,
-      RegistryError,
-      { id: string; data: Partial<CreatePartnerRequest> }
-    >,
-    'mutationFn'
-  >
-) {
-  const client = useRegistryClient();
-  const queryClient = useQueryClient();
-
-  return useMutation<
-    Partner,
-    RegistryError,
-    { id: string; data: Partial<CreatePartnerRequest> }
-  >({
-    mutationFn: ({ id, data }) => client.updatePartner(id, data),
-    onSuccess: (updatedPartner) => {
-      queryClient.invalidateQueries({
-        queryKey: registryKeys.partners(),
-      });
-      queryClient.setQueryData(
-        registryKeys.partner(updatedPartner.id),
-        updatedPartner
-      );
-    },
-    ...options,
-  });
-}
-
-/**
- * Hook to suspend a partner
- */
-export function useSuspendPartner(
-  options?: Omit<
-    UseMutationOptions<Partner, RegistryError, string>,
-    'mutationFn'
-  >
-) {
-  const client = useRegistryClient();
-  const queryClient = useQueryClient();
-
-  return useMutation<Partner, RegistryError, string>({
-    mutationFn: (id) => client.suspendPartner(id),
-    onSuccess: (updatedPartner) => {
-      queryClient.invalidateQueries({
-        queryKey: registryKeys.partners(),
-      });
-      queryClient.setQueryData(
-        registryKeys.partner(updatedPartner.id),
-        updatedPartner
-      );
-    },
-    ...options,
-  });
-}
-
-/**
- * Hook to reactivate a suspended partner
- */
-export function useReactivatePartner(
-  options?: Omit<
-    UseMutationOptions<Partner, RegistryError, string>,
-    'mutationFn'
-  >
-) {
-  const client = useRegistryClient();
-  const queryClient = useQueryClient();
-
-  return useMutation<Partner, RegistryError, string>({
-    mutationFn: (id) => client.reactivatePartner(id),
-    onSuccess: (updatedPartner) => {
-      queryClient.invalidateQueries({
-        queryKey: registryKeys.partners(),
-      });
-      queryClient.setQueryData(
-        registryKeys.partner(updatedPartner.id),
-        updatedPartner
-      );
     },
     ...options,
   });
@@ -377,41 +334,112 @@ export function useReactivatePartner(
  * Hook to fetch users in an organization
  */
 export function useOrgUsers(
-  orgId: string,
+  params: ListOrgUsersRequest,
   options?: Omit<
-    UseQueryOptions<OrgUser[], RegistryError>,
+    UseQueryOptions<PaginatedResponse<OrgUser>, RegistryError>,
     'queryKey' | 'queryFn'
   >
 ) {
   const client = useRegistryClient();
+  const { orgId, ...restParams } = params;
 
-  return useQuery<OrgUser[], RegistryError>({
-    queryKey: registryKeys.orgUsers(orgId),
-    queryFn: () => client.getOrgUsers(orgId),
+  return useQuery<PaginatedResponse<OrgUser>, RegistryError>({
+    queryKey: registryKeys.orgUsers(orgId, restParams),
+    queryFn: () => client.getOrgUsers(params),
     enabled: !!orgId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
     ...options,
   });
 }
 
 /**
- * Hook to invite a user to an organization
+ * Hook to fetch a single user
  */
-export function useInviteUser(
+export function useOrgUser(
+  userId: string,
   options?: Omit<
-    UseMutationOptions<OrgUser, RegistryError, InviteUserRequest>,
+    UseQueryOptions<OrgUser, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<OrgUser, RegistryError>({
+    queryKey: registryKeys.user(userId),
+    queryFn: () => client.getOrgUser(userId),
+    enabled: !!userId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to fetch a user by email
+ */
+export function useOrgUserByEmail(
+  email: string,
+  options?: Omit<
+    UseQueryOptions<OrgUser | null, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<OrgUser | null, RegistryError>({
+    queryKey: registryKeys.userByEmail(email),
+    queryFn: () => client.getOrgUserByEmail(email),
+    enabled: !!email,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to create a user
+ */
+export function useCreateOrgUser(
+  options?: Omit<
+    UseMutationOptions<AdminResponse, RegistryError, CreateOrgUserRequest>,
     'mutationFn'
   >
 ) {
   const client = useRegistryClient();
   const queryClient = useQueryClient();
 
-  return useMutation<OrgUser, RegistryError, InviteUserRequest>({
-    mutationFn: ({ orgId, email, role }) =>
-      client.inviteUser(orgId, email, role),
-    onSuccess: (newUser) => {
+  return useMutation<AdminResponse, RegistryError, CreateOrgUserRequest>({
+    mutationFn: (data) => client.createOrgUser(data),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
-        queryKey: registryKeys.orgUsers(newUser.orgId),
+        queryKey: registryKeys.orgUsers(variables.user.orgId),
       });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to update a user
+ */
+export function useUpdateOrgUser(
+  options?: Omit<
+    UseMutationOptions<AdminResponse, RegistryError, UpdateOrgUserRequest>,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminResponse, RegistryError, UpdateOrgUserRequest>({
+    mutationFn: (data) => client.updateOrgUser(data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.users(),
+      });
+      if (variables.user.userId) {
+        queryClient.invalidateQueries({
+          queryKey: registryKeys.user(variables.user.userId),
+        });
+      }
     },
     ...options,
   });
@@ -423,7 +451,7 @@ export function useInviteUser(
 export function useUpdateUserRole(
   options?: Omit<
     UseMutationOptions<
-      OrgUser,
+      AdminResponse,
       RegistryError,
       { orgId: string; userId: string; role: OrgRole }
     >,
@@ -434,15 +462,18 @@ export function useUpdateUserRole(
   const queryClient = useQueryClient();
 
   return useMutation<
-    OrgUser,
+    AdminResponse,
     RegistryError,
     { orgId: string; userId: string; role: OrgRole }
   >({
     mutationFn: ({ orgId, userId, role }) =>
       client.updateUserRole(orgId, userId, role),
-    onSuccess: (updatedUser) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
-        queryKey: registryKeys.orgUsers(updatedUser.orgId),
+        queryKey: registryKeys.orgUsers(variables.orgId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.user(variables.userId),
       });
     },
     ...options,
@@ -450,24 +481,339 @@ export function useUpdateUserRole(
 }
 
 /**
- * Hook to remove a user from an organization
+ * Hook to deactivate a user
  */
-export function useRemoveUser(
+export function useDeactivateUser(
   options?: Omit<
-    UseMutationOptions<void, RegistryError, { orgId: string; userId: string }>,
+    UseMutationOptions<AdminResponse, RegistryError, string>,
     'mutationFn'
   >
 ) {
   const client = useRegistryClient();
   const queryClient = useQueryClient();
 
-  return useMutation<void, RegistryError, { orgId: string; userId: string }>({
-    mutationFn: ({ orgId, userId }) => client.removeUser(orgId, userId),
-    onSuccess: (_data, { orgId }) => {
+  return useMutation<AdminResponse, RegistryError, string>({
+    mutationFn: (userId) => client.deactivateUser(userId),
+    onSuccess: (_data, userId) => {
       queryClient.invalidateQueries({
-        queryKey: registryKeys.orgUsers(orgId),
+        queryKey: registryKeys.users(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.user(userId),
       });
     },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Key Management Hooks
+// ============================================================================
+
+/**
+ * Hook to list keys for an organization
+ */
+export function useOrgKeys(
+  params: ListKeysRequest,
+  options?: Omit<
+    UseQueryOptions<PaginatedResponse<PartnerKeyRecord>, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+  const { orgId, ...restParams } = params;
+
+  return useQuery<PaginatedResponse<PartnerKeyRecord>, RegistryError>({
+    queryKey: registryKeys.orgKeys(orgId, restParams),
+    queryFn: () => client.listKeys(params),
+    enabled: !!orgId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to get a specific key
+ */
+export function useKey(
+  orgId: string,
+  keyId: string,
+  options?: Omit<
+    UseQueryOptions<PartnerKeyRecord, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<PartnerKeyRecord, RegistryError>({
+    queryKey: registryKeys.key(orgId, keyId),
+    queryFn: () => client.getKey(orgId, keyId),
+    enabled: !!orgId && !!keyId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to generate a new key pair
+ */
+export function useGenerateKeyPair(
+  options?: Omit<
+    UseMutationOptions<PartnerKeyRecord, RegistryError, GenerateKeyPairRequest>,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<PartnerKeyRecord, RegistryError, GenerateKeyPairRequest>({
+    mutationFn: (data) => client.generateKeyPair(data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.orgKeys(variables.orgId),
+      });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to activate a pending key
+ */
+export function useActivateKey(
+  options?: Omit<
+    UseMutationOptions<
+      AdminResponse,
+      RegistryError,
+      { orgId: string; keyId: string; requesterUserId: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    AdminResponse,
+    RegistryError,
+    { orgId: string; keyId: string; requesterUserId: string }
+  >({
+    mutationFn: ({ orgId, keyId, requesterUserId }) =>
+      client.activateKey(orgId, keyId, requesterUserId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.orgKeys(variables.orgId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.key(variables.orgId, variables.keyId),
+      });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to rotate a key
+ */
+export function useRotateKey(
+  options?: Omit<
+    UseMutationOptions<RotateKeyResponse, RegistryError, RotateKeyRequest>,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<RotateKeyResponse, RegistryError, RotateKeyRequest>({
+    mutationFn: (data) => client.rotateKey(data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.orgKeys(variables.orgId),
+      });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to revoke a key
+ */
+export function useRevokeKey(
+  options?: Omit<
+    UseMutationOptions<AdminResponse, RegistryError, RevokeKeyRequest>,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminResponse, RegistryError, RevokeKeyRequest>({
+    mutationFn: (data) => client.revokeKey(data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.orgKeys(variables.orgId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.key(variables.orgId, variables.keyId),
+      });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Key Escrow Hooks
+// ============================================================================
+
+/**
+ * Hook to list key escrows for an organization
+ */
+export function useKeyEscrows(
+  orgId: string,
+  options?: Omit<
+    UseQueryOptions<{ escrows: KeyEscrow[] }, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<{ escrows: KeyEscrow[] }, RegistryError>({
+    queryKey: registryKeys.orgEscrows(orgId),
+    queryFn: () => client.listKeyEscrows(orgId),
+    enabled: !!orgId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to request key escrow
+ */
+export function useRequestKeyEscrow(
+  options?: Omit<
+    UseMutationOptions<
+      KeyEscrowResponse,
+      RegistryError,
+      RequestKeyEscrowRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<KeyEscrowResponse, RegistryError, RequestKeyEscrowRequest>(
+    {
+      mutationFn: (data) => client.requestKeyEscrow(data),
+      onSuccess: (_data, variables) => {
+        queryClient.invalidateQueries({
+          queryKey: registryKeys.orgEscrows(variables.orgId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: registryKeys.orgKeys(variables.orgId),
+        });
+      },
+      ...options,
+    }
+  );
+}
+
+/**
+ * Hook to request key recovery
+ */
+export function useRequestKeyRecovery(
+  options?: Omit<
+    UseMutationOptions<
+      KeyRecoveryResponse,
+      RegistryError,
+      RequestKeyRecoveryRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    KeyRecoveryResponse,
+    RegistryError,
+    RequestKeyRecoveryRequest
+  >({
+    mutationFn: (data) => client.requestKeyRecovery(data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.orgEscrows(variables.orgId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.orgKeys(variables.orgId),
+      });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Partner Hooks
+// ============================================================================
+
+/**
+ * Hook to lookup a partner
+ */
+export function usePartner(
+  partnerId: string,
+  options?: Omit<
+    UseQueryOptions<PartnerRecord | null, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<PartnerRecord | null, RegistryError>({
+    queryKey: registryKeys.partner(partnerId),
+    queryFn: () => client.lookupPartner(partnerId),
+    enabled: !!partnerId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to get partner activity
+ */
+export function usePartnerActivity(
+  partnerId: string,
+  options?: Omit<
+    UseQueryOptions<PartnerActivityResponse, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<PartnerActivityResponse, RegistryError>({
+    queryKey: registryKeys.partnerActivity(partnerId),
+    queryFn: () => client.getPartnerActivity(partnerId),
+    enabled: !!partnerId,
+    staleTime: 15 * 60 * 1000, // 15 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to list expiring licenses
+ */
+export function useExpiringLicenses(
+  params?: ListExpiringLicensesRequest,
+  options?: Omit<
+    UseQueryOptions<ListExpiringLicensesResponse, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<ListExpiringLicensesResponse, RegistryError>({
+    queryKey: registryKeys.expiringLicenses(params),
+    queryFn: () => client.listExpiringLicenses(params),
+    staleTime: 60 * 60 * 1000, // 1 hour
     ...options,
   });
 }
@@ -491,39 +837,20 @@ export function useAuditLog(
   return useQuery<PaginatedResponse<AuditEntry>, RegistryError>({
     queryKey: registryKeys.auditLog(filters),
     queryFn: () => client.getAuditLog(filters),
+    staleTime: 0, // Always fetch fresh
     ...options,
   });
 }
 
 /**
- * Hook to fetch a single audit entry by ID
+ * Hook to export audit log
  */
-export function useAuditEntry(
-  id: string,
-  options?: Omit<
-    UseQueryOptions<AuditEntry, RegistryError>,
-    'queryKey' | 'queryFn'
-  >
-) {
-  const client = useRegistryClient();
-
-  return useQuery<AuditEntry, RegistryError>({
-    queryKey: registryKeys.auditEntry(id),
-    queryFn: () => client.getAuditEntry(id),
-    enabled: !!id,
-    ...options,
-  });
-}
-
-/**
- * Hook to verify an audit entry's integrity
- */
-export function useVerifyAuditEntry(
+export function useExportAuditLog(
   options?: Omit<
     UseMutationOptions<
-      { valid: boolean; errors?: string[] },
+      ExportAuditLogResponse,
       RegistryError,
-      string
+      ExportAuditLogRequest
     >,
     'mutationFn'
   >
@@ -531,11 +858,146 @@ export function useVerifyAuditEntry(
   const client = useRegistryClient();
 
   return useMutation<
-    { valid: boolean; errors?: string[] },
+    ExportAuditLogResponse,
     RegistryError,
-    string
+    ExportAuditLogRequest
   >({
-    mutationFn: (id) => client.verifyAuditEntry(id),
+    mutationFn: (data) => client.exportAuditLog(data),
     ...options,
   });
 }
+
+// ============================================================================
+// Compliance Hooks
+// ============================================================================
+
+/**
+ * Hook to generate compliance report
+ */
+export function useGenerateComplianceReport(
+  options?: Omit<
+    UseMutationOptions<
+      ComplianceReport,
+      RegistryError,
+      GenerateComplianceReportRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    ComplianceReport,
+    RegistryError,
+    GenerateComplianceReportRequest
+  >({
+    mutationFn: (data) => client.generateComplianceReport(data),
+    onSuccess: (data, variables) => {
+      // Cache the report
+      queryClient.setQueryData(registryKeys.complianceReport(variables), data);
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to fetch a cached compliance report
+ */
+export function useComplianceReport(
+  params: GenerateComplianceReportRequest,
+  options?: Omit<
+    UseQueryOptions<ComplianceReport, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<ComplianceReport, RegistryError>({
+    queryKey: registryKeys.complianceReport(params),
+    queryFn: () => client.generateComplianceReport(params),
+    staleTime: 60 * 60 * 1000, // 1 hour
+    ...options,
+  });
+}
+
+// ============================================================================
+// Webhook Hooks
+// ============================================================================
+
+/**
+ * Hook to list webhooks
+ */
+export function useWebhooks(
+  options?: Omit<
+    UseQueryOptions<ListWebhooksResponse, RegistryError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const client = useRegistryClient();
+
+  return useQuery<ListWebhooksResponse, RegistryError>({
+    queryKey: registryKeys.webhooks(),
+    queryFn: () => client.listWebhooks(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...options,
+  });
+}
+
+/**
+ * Hook to register a webhook
+ */
+export function useRegisterWebhook(
+  options?: Omit<
+    UseMutationOptions<AdminResponse, RegistryError, RegisterWebhookRequest>,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminResponse, RegistryError, RegisterWebhookRequest>({
+    mutationFn: (data) => client.registerWebhook(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.webhooks(),
+      });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to delete a webhook
+ */
+export function useDeleteWebhook(
+  options?: Omit<
+    UseMutationOptions<AdminResponse, RegistryError, string>,
+    'mutationFn'
+  >
+) {
+  const client = useRegistryClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminResponse, RegistryError, string>({
+    mutationFn: (webhookId) => client.deleteWebhook(webhookId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: registryKeys.webhooks(),
+      });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Re-exports for convenience
+// ============================================================================
+
+export {
+  OrgRole,
+  KeyRotationMode,
+  KeyEscrowType,
+  ComplianceFramework,
+  AuditExportFormat,
+};

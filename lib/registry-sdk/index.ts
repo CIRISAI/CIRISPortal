@@ -1,11 +1,11 @@
 /**
  * CIRIS Registry SDK
  *
- * TypeScript SDK for interacting with the CIRIS Registry API
+ * TypeScript SDK for interacting with the CIRIS Registry API v1.1.0
  *
  * @example
  * ```typescript
- * import { RegistryClient, useOrganizations, useCreatePartner } from '@/lib/registry-sdk';
+ * import { RegistryClient, useOrganizations, useOrgKeys } from '@/lib/registry-sdk';
  *
  * // Using the client directly
  * const client = new RegistryClient({
@@ -16,35 +16,15 @@
  * // Using React Query hooks
  * function OrganizationList() {
  *   const { data: orgs, isLoading } = useOrganizations();
- *   const createPartner = useCreatePartner();
+ *   const { data: keys } = useOrgKeys({ orgId: 'org-123' });
  *
  *   // ...
  * }
  * ```
  */
 
-// Types
-export type {
-  // Enums/unions
-  OrgRole,
-  PartnerStatus,
-  CustodyModel,
-  // Core entities
-  Organization,
-  Partner,
-  OrgUser,
-  AuditEntry,
-  PublicKeys,
-  PartnerCapabilities,
-  // Request types
-  CreateOrganizationRequest,
-  CreatePartnerRequest,
-  InviteUserRequest,
-  AuditLogFilters,
-  // Response types
-  PaginatedResponse,
-  ApiErrorResponse,
-} from './types';
+// Export all types
+export * from './types';
 
 // Client
 export {
@@ -53,7 +33,12 @@ export {
   RegistryNetworkError,
   getRegistryClient,
   resetRegistryClient,
+  consoleLogger,
+  noopLogger,
   type RegistryClientConfig,
+  type Logger,
+  type LogEntry,
+  type LogLevel,
 } from './client';
 
 // Hooks
@@ -62,26 +47,46 @@ export {
   registryKeys,
   // Client hook
   useRegistryClient,
+  // Health & Monitoring
+  useHealthCheck,
+  useMetrics,
+  useEmergencyStatus,
   // Organization hooks
   useOrganizations,
   useOrganization,
   useCreateOrganization,
   useUpdateOrganization,
-  useDeleteOrganization,
-  // Partner hooks
-  usePartners,
-  usePartner,
-  useCreatePartner,
-  useUpdatePartner,
-  useSuspendPartner,
-  useReactivatePartner,
   // User hooks
   useOrgUsers,
-  useInviteUser,
+  useOrgUser,
+  useOrgUserByEmail,
+  useCreateOrgUser,
+  useUpdateOrgUser,
   useUpdateUserRole,
-  useRemoveUser,
+  useDeactivateUser,
+  // Key hooks
+  useOrgKeys,
+  useKey,
+  useGenerateKeyPair,
+  useActivateKey,
+  useRotateKey,
+  useRevokeKey,
+  // Key Escrow hooks
+  useKeyEscrows,
+  useRequestKeyEscrow,
+  useRequestKeyRecovery,
+  // Partner hooks
+  usePartner,
+  usePartnerActivity,
+  useExpiringLicenses,
   // Audit hooks
   useAuditLog,
-  useAuditEntry,
-  useVerifyAuditEntry,
+  useExportAuditLog,
+  // Compliance hooks
+  useGenerateComplianceReport,
+  useComplianceReport,
+  // Webhook hooks
+  useWebhooks,
+  useRegisterWebhook,
+  useDeleteWebhook,
 } from './hooks';

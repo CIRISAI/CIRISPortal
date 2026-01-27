@@ -7,8 +7,10 @@ import {
   LayoutDashboard,
   Building2,
   Users,
+  UserCog,
   Key,
   ScrollText,
+  FileCheck,
   Settings,
 } from 'lucide-react';
 
@@ -24,6 +26,11 @@ const navigation = [
     icon: Building2,
   },
   {
+    name: 'Users',
+    href: '/users',
+    icon: UserCog,
+  },
+  {
     name: 'Partners',
     href: '/partners',
     icon: Users,
@@ -37,6 +44,11 @@ const navigation = [
     name: 'Audit Log',
     href: '/audit',
     icon: ScrollText,
+  },
+  {
+    name: 'Compliance',
+    href: '/compliance',
+    icon: FileCheck,
   },
   {
     name: 'Settings',
