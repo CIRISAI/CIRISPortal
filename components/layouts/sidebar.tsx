@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -18,74 +19,133 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 
-const navigation = [
+type NavItem = {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: string[]; // If undefined, visible to all roles
+};
+
+// Navigation items with role restrictions
+const navigation: NavItem[] = [
   {
     name: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+    // All roles can see dashboard
   },
   {
     name: 'Organizations',
     href: '/organizations',
     icon: Building2,
+    roles: ['admin'], // Admin only
   },
   {
     name: 'Users',
     href: '/users',
     icon: UserCog,
+    roles: ['admin', 'partner'], // Admin and Partner
   },
   {
-    name: 'Partners',
+    name: 'Licensees',
     href: '/partners',
     icon: Users,
+    roles: ['admin', 'partner'], // Admin and Partner can manage licensees
   },
   {
     name: 'Keys',
     href: '/keys',
     icon: Key,
+    // All roles can view keys (scoped to their org)
   },
   {
     name: 'Webhooks',
     href: '/webhooks',
     icon: Webhook,
+    roles: ['admin', 'partner'], // Admin and Partner
   },
   {
     name: 'Audit Log',
     href: '/audit',
     icon: ScrollText,
+    // All roles can view audit (scoped to their org)
   },
   {
     name: 'Compliance',
     href: '/compliance',
     icon: FileCheck,
+    roles: ['admin', 'partner'], // Admin and Partner
   },
   {
     name: 'Settings',
     href: '/settings',
     icon: Settings,
+    // All roles can access settings
   },
 ];
 
-const adminNavigation = [
+// Admin-only navigation section
+const adminNavigation: NavItem[] = [
   {
     name: 'Partner Licenses',
     href: '/admin/partners',
     icon: BadgeCheck,
+    roles: ['admin'],
   },
   {
     name: 'Agent Registry',
     href: '/admin/agents',
     icon: Bot,
+    roles: ['admin'],
   },
   {
     name: 'Incident Response',
     href: '/admin/incidents',
     icon: ShieldAlert,
+    roles: ['admin'],
   },
 ];
 
+function getRoleBadge(role: string) {
+  switch (role) {
+    case 'admin':
+      return (
+        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+          Admin
+        </span>
+      );
+    case 'partner':
+      return (
+        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+          Partner
+        </span>
+      );
+    case 'licensee':
+      return (
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+          Licensee
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  // @ts-expect-error - extended session type
+  const userRole = (session?.user?.role as string) || 'licensee';
+
+  // Filter navigation items based on user role
+  const visibleNavigation = navigation.filter(
+    (item) => !item.roles || item.roles.includes(userRole)
+  );
+
+  const visibleAdminNavigation = adminNavigation.filter(
+    (item) => !item.roles || item.roles.includes(userRole)
+  );
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-white">
@@ -98,8 +158,16 @@ export function Sidebar() {
         </Link>
       </div>
 
+      {/* Role indicator */}
+      <div className="border-b px-4 py-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500">Logged in as</span>
+          {getRoleBadge(userRole)}
+        </div>
+      </div>
+
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        {navigation.map((item) => {
+        {visibleNavigation.map((item) => {
           const isActive =
             pathname === item.href || pathname?.startsWith(item.href + '/');
           const Icon = item.icon;
@@ -121,33 +189,35 @@ export function Sidebar() {
           );
         })}
 
-        {/* Admin Section */}
-        <div className="mt-6 border-t pt-4">
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-            Admin
-          </p>
-          {adminNavigation.map((item) => {
-            const isActive =
-              pathname === item.href || pathname?.startsWith(item.href + '/');
-            const Icon = item.icon;
+        {/* Admin Section - only visible to admins */}
+        {visibleAdminNavigation.length > 0 && (
+          <div className="mt-6 border-t pt-4">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Admin
+            </p>
+            {visibleAdminNavigation.map((item) => {
+              const isActive =
+                pathname === item.href || pathname?.startsWith(item.href + '/');
+              const Icon = item.icon;
 
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-red-50 text-red-700'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                )}
-              >
-                <Icon className="h-5 w-5" />
-                {item.name}
-              </Link>
-            );
-          })}
-        </div>
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-red-50 text-red-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       <div className="border-t p-4">

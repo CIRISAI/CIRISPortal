@@ -1,144 +1,181 @@
-import { Save, Shield, Bell, Database } from 'lucide-react';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { Save, Shield, Bell, Key, Building2 } from 'lucide-react';
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
+  // @ts-expect-error - extended session type
+  const userRole = session?.user?.role || 'user';
+  // @ts-expect-error - extended session type
+  const userOrgId = session?.user?.orgId || 'unknown';
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
         <p className="mt-1 text-gray-600">
-          Configure system preferences and security
+          Configure your account and organization preferences
         </p>
       </div>
 
       <div className="grid gap-6">
-        {/* GDPR Configuration */}
+        {/* Account Information */}
         <div className="rounded-lg border bg-white p-6">
           <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-blue-100 p-2">
-              <Shield className="h-5 w-5 text-blue-600" />
+            <div className="rounded-lg bg-emerald-100 p-2">
+              <Shield className="h-5 w-5 text-emerald-600" />
             </div>
-            <h2 className="text-lg font-semibold">GDPR Configuration</h2>
+            <h2 className="text-lg font-semibold">Account Information</h2>
           </div>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Default Response Window (days)
+                Email
               </label>
               <input
-                type="number"
-                className="mt-1 w-full max-w-xs rounded-lg border px-3 py-2"
-                defaultValue={30}
+                type="email"
+                className="mt-1 w-full max-w-md rounded-lg border bg-gray-50 px-3 py-2"
+                value={session?.user?.email || ''}
+                disabled
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Display Name
+              </label>
+              <input
+                type="text"
+                className="mt-1 w-full max-w-md rounded-lg border px-3 py-2"
+                defaultValue={session?.user?.name || ''}
+              />
+            </div>
+
+            <div className="flex gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Role
+                </label>
+                <span className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800">
+                  {userRole}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Organization
+                </label>
+                <span className="mt-1 inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800">
+                  {userOrgId}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Organization Settings (Partner/Admin only) */}
+        {(userRole === 'admin' || userRole === 'partner') && (
+          <div className="rounded-lg border bg-white p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-lg bg-blue-100 p-2">
+                <Building2 className="h-5 w-5 text-blue-600" />
+              </div>
+              <h2 className="text-lg font-semibold">Organization Settings</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Organization Name
+                </label>
+                <input
+                  type="text"
+                  className="mt-1 w-full max-w-md rounded-lg border px-3 py-2"
+                  placeholder="Your Organization"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Primary Contact Email
+                </label>
+                <input
+                  type="email"
+                  className="mt-1 w-full max-w-md rounded-lg border px-3 py-2"
+                  placeholder="contact@organization.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Key Custody Model
+                </label>
+                <select className="mt-1 w-full max-w-xs rounded-lg border px-3 py-2">
+                  <option value="custodied">
+                    Custodied (CIRIS manages keys)
+                  </option>
+                  <option value="self">Self-custody (you manage keys)</option>
+                </select>
+                <p className="mt-1 text-sm text-gray-600">
+                  Determines how signing keys are managed for your organization
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Key Settings */}
+        <div className="rounded-lg border bg-white p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="rounded-lg bg-purple-100 p-2">
+              <Key className="h-5 w-5 text-purple-600" />
+            </div>
+            <h2 className="text-lg font-semibold">Key Management</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Key Rotation Policy
+              </label>
+              <select className="mt-1 w-full max-w-xs rounded-lg border px-3 py-2">
+                <option>90 days (recommended)</option>
+                <option>180 days</option>
+                <option>365 days</option>
+                <option>Manual only</option>
+              </select>
               <p className="mt-1 text-sm text-gray-600">
-                GDPR requires responses within 30 days
+                Automatic key rotation interval for compliance
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                id="auto-delete"
-                className="h-4 w-4 rounded border-gray-300"
-                defaultChecked
-              />
-              <label htmlFor="auto-delete" className="text-sm text-gray-700">
-                Automatically delete completed DSARs after 90 days
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="email-notifications"
+                id="rotation-notify"
                 className="h-4 w-4 rounded border-gray-300"
                 defaultChecked
               />
               <label
-                htmlFor="email-notifications"
+                htmlFor="rotation-notify"
                 className="text-sm text-gray-700"
               >
-                Send email notifications for DSAR status changes
+                Notify before key rotation (7 days advance notice)
               </label>
             </div>
-          </div>
-        </div>
 
-        {/* Identity Resolution */}
-        <div className="rounded-lg border bg-white p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-purple-100 p-2">
-              <Database className="h-5 w-5 text-purple-600" />
-            </div>
-            <h2 className="text-lg font-semibold">Identity Resolution</h2>
-          </div>
-
-          <div className="space-y-4">
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                id="identity-graph"
+                id="grace-period"
                 className="h-4 w-4 rounded border-gray-300"
                 defaultChecked
               />
-              <label htmlFor="identity-graph" className="text-sm text-gray-700">
-                Enable identity graph matching
+              <label htmlFor="grace-period" className="text-sm text-gray-700">
+                Enable grace period for key transitions (24 hours)
               </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Matching Confidence Threshold
-              </label>
-              <input
-                type="range"
-                className="mt-2 w-full max-w-xs"
-                min="50"
-                max="100"
-                defaultValue={85}
-              />
-              <p className="mt-1 text-sm text-gray-600">85% (recommended)</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Trusted Identifier Types
-              </label>
-              <div className="mt-2 space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="email-id"
-                    className="h-4 w-4 rounded border-gray-300"
-                    defaultChecked
-                  />
-                  <label htmlFor="email-id" className="text-sm text-gray-700">
-                    Email addresses
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="discord-id"
-                    className="h-4 w-4 rounded border-gray-300"
-                    defaultChecked
-                  />
-                  <label htmlFor="discord-id" className="text-sm text-gray-700">
-                    Discord IDs
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="user-id"
-                    className="h-4 w-4 rounded border-gray-300"
-                    defaultChecked
-                  />
-                  <label htmlFor="user-id" className="text-sm text-gray-700">
-                    User IDs
-                  </label>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -153,15 +190,46 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Alert Email
-              </label>
+            <div className="flex items-center gap-2">
               <input
-                type="email"
-                className="mt-1 w-full max-w-md rounded-lg border px-3 py-2"
-                defaultValue="compliance@company.com"
+                type="checkbox"
+                id="notify-key-events"
+                className="h-4 w-4 rounded border-gray-300"
+                defaultChecked
               />
+              <label
+                htmlFor="notify-key-events"
+                className="text-sm text-gray-700"
+              >
+                Key management events (rotation, revocation)
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="notify-license"
+                className="h-4 w-4 rounded border-gray-300"
+                defaultChecked
+              />
+              <label htmlFor="notify-license" className="text-sm text-gray-700">
+                License expiry warnings (30 days before)
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="notify-security"
+                className="h-4 w-4 rounded border-gray-300"
+                defaultChecked
+              />
+              <label
+                htmlFor="notify-security"
+                className="text-sm text-gray-700"
+              >
+                Security alerts (emergency shutdown, mass revocation)
+              </label>
             </div>
 
             <div>
@@ -174,69 +242,15 @@ export default function SettingsPage() {
                 placeholder="https://your-webhook.com/endpoint"
               />
               <p className="mt-1 text-sm text-gray-600">
-                Receive real-time DSAR status updates
+                Receive real-time event notifications via webhook
               </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Security Settings */}
-        <div className="rounded-lg border bg-white p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-red-100 p-2">
-              <Shield className="h-5 w-5 text-red-600" />
-            </div>
-            <h2 className="text-lg font-semibold">Security</h2>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                API Key
-              </label>
-              <div className="mt-1 flex gap-2">
-                <input
-                  type="password"
-                  className="max-w-md flex-1 rounded-lg border px-3 py-2"
-                  value="••••••••••••••••"
-                  readOnly
-                />
-                <button className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50">
-                  Regenerate
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Data Retention Period
-              </label>
-              <select className="mt-1 w-full max-w-xs rounded-lg border px-3 py-2">
-                <option>7 years (default)</option>
-                <option>5 years</option>
-                <option>3 years</option>
-                <option>1 year</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="encryption"
-                className="h-4 w-4 rounded border-gray-300"
-                defaultChecked
-                disabled
-              />
-              <label htmlFor="encryption" className="text-sm text-gray-700">
-                Encrypt all PII at rest (always enabled)
-              </label>
             </div>
           </div>
         </div>
 
         {/* Save Button */}
         <div className="flex justify-end">
-          <button className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+          <button className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700">
             <Save className="h-5 w-5" />
             Save Settings
           </button>

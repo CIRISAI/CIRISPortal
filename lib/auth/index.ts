@@ -12,20 +12,29 @@ import { TEST_ORG_ID, TEST_SECONDARY_ORG_ID } from '../test-config';
 const CIRIS_ORG_ID = 'ciris-internal';
 
 /**
+ * Role hierarchy for CIRISPortal:
+ * - admin: CIRIS internal team, full system access
+ * - partner: Organization admins who manage licensees
+ * - licensee: End users with read-only access to their org
+ */
+export type UserRole = 'admin' | 'partner' | 'licensee';
+
+/**
  * Determine role based on email domain
  * - ciris.ai = admin (internal team)
- * - others = user (partners)
+ * - others = licensee (default, can be upgraded to partner)
  */
-function getRoleForEmail(email: string): { role: string; orgId: string } {
+function getRoleForEmail(email: string): { role: UserRole; orgId: string } {
   const domain = email.split('@')[1]?.toLowerCase();
 
   if (domain === 'ciris.ai') {
     return { role: 'admin', orgId: CIRIS_ORG_ID };
   }
 
-  // Future: look up partner org by domain
-  // For now, non-ciris.ai users get user role
-  return { role: 'user', orgId: `partner-${domain}` };
+  // Future: look up partner/licensee status from backend
+  // For now, non-ciris.ai users default to licensee role
+  // Partners would be promoted via admin action
+  return { role: 'licensee', orgId: `org-${domain}` };
 }
 
 /**

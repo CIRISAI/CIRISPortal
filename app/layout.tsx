@@ -6,9 +6,9 @@ import { Providers } from './providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'SageGUI - GDPR Compliance Management',
+  title: 'CIRISPortal - Registry Administration',
   description:
-    'Manage GDPR data subject requests and compliance through CIRISAgent',
+    'Administrative portal for managing partners, agents, and keys in the CIRIS ecosystem',
 };
 
 export default function RootLayout({

@@ -11,7 +11,7 @@ export function Header() {
     <header className="flex h-16 items-center justify-between border-b bg-white px-6">
       <div className="flex-1">
         <h2 className="text-lg font-semibold text-gray-900">
-          GDPR Compliance Management
+          CIRIS Registry Administration
         </h2>
       </div>
 
@@ -58,9 +58,18 @@ export function Header() {
                     'U'}
                 </div>
               )}
-              <span className="text-sm font-medium text-gray-700">
-                {session.user.email}
-              </span>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-gray-700">
+                  {session.user.email}
+                </span>
+                {/* @ts-expect-error - extended session type */}
+                {session.user.orgId && (
+                  <span className="text-xs text-gray-500">
+                    {/* @ts-expect-error - extended session type */}
+                    {session.user.orgId}
+                  </span>
+                )}
+              </div>
             </div>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
