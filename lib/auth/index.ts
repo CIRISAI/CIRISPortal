@@ -6,6 +6,29 @@ import { getAppEnv, getAuthConfig } from '../env';
 import { TEST_ORG_ID, TEST_SECONDARY_ORG_ID } from '../test-config';
 
 /**
+ * CIRIS Organization ID - internal team org
+ * ciris.ai domain users are auto-provisioned here as admins
+ */
+const CIRIS_ORG_ID = 'ciris-internal';
+
+/**
+ * Determine role based on email domain
+ * - ciris.ai = admin (internal team)
+ * - others = user (partners)
+ */
+function getRoleForEmail(email: string): { role: string; orgId: string } {
+  const domain = email.split('@')[1]?.toLowerCase();
+
+  if (domain === 'ciris.ai') {
+    return { role: 'admin', orgId: CIRIS_ORG_ID };
+  }
+
+  // Future: look up partner org by domain
+  // For now, non-ciris.ai users get user role
+  return { role: 'user', orgId: `partner-${domain}` };
+}
+
+/**
  * Test users available in devtest environment
  */
 const TEST_USERS: Record<
@@ -129,6 +152,13 @@ export const authOptions: NextAuthOptions = {
         if (testUser) {
           token.orgId = testUser.orgId;
           token.role = testUser.role;
+        } else if (user.email) {
+          // OAuth users: determine role based on email domain
+          // ciris.ai = admin (internal team)
+          // others = user (partners)
+          const { role, orgId } = getRoleForEmail(user.email);
+          token.orgId = orgId;
+          token.role = role;
         }
       }
       return token;
