@@ -6,8 +6,10 @@ CIRISPortal is the administrative interface for the CIRIS ecosystem, deployed at
 
 - **Organization Management** - Onboard and manage partner organizations
 - **User Management** - Invite users, assign roles within organizations
+- **Agent Registry** - Register and manage AI agents
 - **Key Custody** - Generate and manage cryptographic keys for partners who don't self-custody
 - **License Management** - View and manage partner licenses and capabilities
+- **Emergency Controls** - Mass revocation, emergency shutdown
 - **Audit Logging** - Cryptographically signed audit trail of all operations
 
 This is a **static ops tool** - no AI agents, just administrative CRUD operations with proper auth and audit trails.
@@ -17,13 +19,14 @@ This is a **static ops tool** - no AI agents, just administrative CRUD operation
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  portal.ciris.ai (CIRISPortal)                                  │
-│  Next.js 15 + NextAuth (Google OAuth) + Cloudflare Pages        │
+│  Next.js 15 + NextAuth + Cloudflare Pages                       │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ▼
+                              ▼ (gRPC via lib/grpc/client.ts)
 ┌─────────────────────────────────────────────────────────────────┐
-│  api.registry.ciris.ai (CIRISRegistry API)                      │
-│  Organization, Partner, Agent, Key management                   │
+│  registry.ciris.ai (CIRISRegistry v1.1.0)                       │
+│  Rust gRPC server on port 50052                                 │
+│  Services: RegistryService, RegistryAdminService, PortalService │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -34,6 +37,39 @@ This is a **static ops tool** - no AI agents, just administrative CRUD operation
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## gRPC Integration
+
+The portal communicates with CIRISRegistry via gRPC. The client is in `lib/grpc/client.ts`.
+
+### Services Used
+
+1. **RegistryService** (public operations)
+   - `healthCheck` - Health status
+   - `lookupAgent` - Agent lookup
+   - `lookupPartner` - Partner lookup
+   - `getPublicKeys` - Get org public keys
+   - `getRevocationList` - Revocation list
+   - `getEmergencyStatus` - Emergency status
+
+2. **RegistryAdminService** (admin operations)
+   - `registerAgent` / `batchRegisterAgents` - Agent registration
+   - `listRegisteredAgents` - List agents with filtering
+   - `setEmergencyShutdown` / `clearEmergencyShutdown` - Emergency controls
+   - `massRevoke` - Mass revocation
+   - `registerWebhook` / `listWebhooks` / `deleteWebhook` - Webhooks
+   - `listExpiringLicenses` - License monitoring
+   - `getPartnerActivity` - Partner activity stats
+
+3. **PortalService** (org/user management)
+   - `getOrganization` / `listOrganizations` - Org CRUD
+   - `listOrgUsers` / `createOrgUser` / `updateOrgUser` - User management
+   - `listKeys` / `generateKeyPair` / `rotateKey` / `revokeKey` - Key management
+   - `getAuditLog` / `exportAuditLog` - Audit logs
+
+### Proto File
+
+The proto definition is at `lib/grpc/ciris_registry.proto` - keep in sync with CIRISRegistry.
+
 ## Role-Based Access
 
 | Role               | Scope   | Capabilities                                   |
@@ -42,6 +78,26 @@ This is a **static ops tool** - no AI agents, just administrative CRUD operation
 | **Wise Authority** | Global  | Adjudicate WBD tickets, view audit logs        |
 | **Partner Admin**  | Own org | Manage org keys, invite users, view license    |
 | **Partner User**   | Own org | Read-only view of org status                   |
+
+## Authentication
+
+### Environment Modes
+
+- **devtest**: Test users enabled, no OAuth required
+- **stage**: OAuth required, relaxed domain checks
+- **prod**: OAuth required, strict domain validation
+
+### Test Users (devtest only)
+
+```
+admin@qa-primary.test / testpass123 - Admin role
+user@qa-primary.test / testpass123 - User role
+admin@qa-secondary.test / testpass123 - Admin (different org)
+```
+
+### Middleware
+
+`middleware.ts` protects all dashboard and API routes. Only `/api/registry/health` is public.
 
 ## Key Custody Model
 
@@ -52,7 +108,7 @@ Partners can choose:
 
 For custodied keys:
 
-- Keys generated server-side (Ed25519 + ML-DSA-65)
+- Keys generated server-side (Ed25519 + ML-DSA-65 planned)
 - Private keys encrypted with envelope encryption (AES-256-GCM)
 - Stored in Cloudflare KV (abstracted behind `KeyStore` interface for future HSM migration)
 - Signing requests authenticated and logged
@@ -83,65 +139,86 @@ interface KeyStore {
 ```
 CIRISPortal/
 ├── app/
-│   ├── (auth)/                    # Auth pages (login, etc.)
+│   ├── (auth)/                    # Auth pages (login)
 │   ├── (dashboard)/               # Protected dashboard routes
-│   │   ├── dashboard/             # Overview
-│   │   ├── organizations/         # Org management (admin)
-│   │   ├── partners/              # Partner records
+│   │   ├── dashboard/             # Overview with status cards
+│   │   ├── admin/                 # Admin pages
+│   │   │   ├── agents/            # Agent registry
+│   │   │   ├── incidents/         # Emergency controls
+│   │   │   └── partners/          # Partner management
 │   │   ├── keys/                  # Key management
 │   │   ├── audit/                 # Audit log viewer
+│   │   ├── webhooks/              # Webhook management
 │   │   └── settings/              # User/org settings
-│   ├── api/
-│   │   ├── auth/[...nextauth]/    # NextAuth routes
-│   │   └── ...                    # API routes
-│   └── ...
+│   └── api/
+│       ├── auth/[...nextauth]/    # NextAuth routes
+│       ├── admin/                 # Admin APIs (agents, emergency, revoke)
+│       ├── registry/              # Registry proxy APIs
+│       └── webhooks/              # Webhook APIs
 ├── components/
 │   ├── layouts/                   # Sidebar, Header
+│   ├── dashboard/                 # Dashboard cards
 │   └── ui/                        # shadcn/ui components
 ├── lib/
-│   ├── auth/                      # Auth utilities
+│   ├── auth/                      # Auth utilities + test users
+│   ├── env.ts                     # Environment configuration
+│   ├── grpc/                      # gRPC client + proto
+│   │   ├── client.ts              # gRPC client methods
+│   │   └── ciris_registry.proto   # Proto definition
 │   ├── keystore/                  # KeyStore interface + implementations
-│   └── registry-sdk/              # CIRISRegistry API client
-└── ...
+│   │   ├── crypto.ts              # Envelope encryption
+│   │   └── cloudflare-kv.ts       # KV implementation
+│   └── registry-sdk/              # React Query hooks for UI
+├── middleware.ts                  # Auth middleware
+├── .env.example                   # Environment template
+└── wrangler.toml                  # Cloudflare config
 ```
 
 ## Security Requirements
 
 ### Authentication
 
-- Google OAuth via NextAuth
-- Session stored in encrypted cookie (Cloudflare-compatible)
-- Role derived from registry API (not stored in session)
+- Google OAuth via NextAuth (prod/stage)
+- Test credentials via NextAuth CredentialsProvider (devtest)
+- JWT session stored in encrypted cookie
+- All API routes protected by middleware
 
-### Key Operations
+### Security Headers
 
-- All key operations require authenticated session
-- All key operations logged with:
-  - User ID, Org ID, Operation, Timestamp
-  - Request hash, Result hash
-  - Signed audit entry
+```
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Content-Security-Policy: default-src 'none' (API routes)
+```
 
 ### Encryption
 
 - Custodied private keys: AES-256-GCM envelope encryption
-- Encryption key stored as Cloudflare secret
-- Key derivation: `org_key = HKDF(master_key, org_id, "ciris-portal-keys")`
+- Master key stored as Cloudflare secret (`KEY_ENCRYPTION_KEY`)
+- Key derivation: `org_key = HKDF(master_key, org_id, "ciris-portal-keys-v1")`
 
 ## Development
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
 # Copy environment file
 cp .env.example .env.local
-# Fill in Google OAuth credentials and encryption key
+
+# Run CIRISRegistry backend (in another terminal)
+cd ../CIRISRegistry && cargo run
 
 # Run development server
-pnpm dev
+npm run dev
+
+# Build for production
+npm run build
 
 # Deploy to Cloudflare Pages
-pnpm deploy
+npm run deploy
 ```
 
 ## CIRIS Covenant Alignment
@@ -157,6 +234,6 @@ This portal operates under the CIRIS Covenant. Key principles:
 
 | Project           | Purpose                             |
 | ----------------- | ----------------------------------- |
-| **CIRISRegistry** | Protocol definitions and API spec   |
+| **CIRISRegistry** | Rust gRPC backend, protocol spec    |
 | **CIRISVerify**   | Hardware-rooted verification binary |
 | **CIRISAgent**    | Core agent framework                |

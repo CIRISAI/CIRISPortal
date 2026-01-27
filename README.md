@@ -10,8 +10,10 @@ CIRISPortal provides:
 
 - **Organization Onboarding** - Create and manage partner organizations
 - **User Management** - Invite users, assign roles (Admin, Partner Admin, User)
+- **Agent Registry** - Register and manage AI agents in the CIRIS ecosystem
 - **Key Custody** - Generate and manage cryptographic signing keys for partners
 - **License Management** - View partner licenses and capability grants
+- **Emergency Controls** - Mass revocation, emergency shutdown capabilities
 - **Audit Logging** - Cryptographically signed trail of all operations
 
 This is a static ops tool - no AI, just clean administrative workflows.
@@ -19,10 +21,10 @@ This is a static ops tool - no AI, just clean administrative workflows.
 ## Architecture
 
 ```
-portal.ciris.ai (Next.js + Cloudflare Pages)
+portal.ciris.ai (Next.js 15 + Cloudflare Pages)
          │
-         ▼
-api.registry.ciris.ai (CIRISRegistry API)
+         ▼ (gRPC)
+registry.ciris.ai (CIRISRegistry v1.1.0)
          │
          ▼
 Cloudflare Workers KV (Encrypted Key Storage)
@@ -34,25 +36,57 @@ Cloudflare Workers KV (Encrypted Key Storage)
 # Clone and install
 git clone https://github.com/CIRISAI/CIRISPortal.git
 cd CIRISPortal
-pnpm install
+npm install
 
 # Configure environment
 cp .env.example .env.local
-# Edit .env.local with your Google OAuth credentials
+# Edit .env.local - for devtest mode, defaults work
+
+# Start the registry backend (in another terminal)
+cd ../CIRISRegistry && cargo run
 
 # Run development server
-pnpm dev
+npm run dev
 ```
 
-Visit http://localhost:3000
+Visit http://localhost:3000 - you'll be redirected to login.
+
+### Test Users (devtest mode)
+
+| Email                   | Password    | Role  |
+| ----------------------- | ----------- | ----- |
+| admin@qa-primary.test   | testpass123 | Admin |
+| user@qa-primary.test    | testpass123 | User  |
+| admin@qa-secondary.test | testpass123 | Admin |
+
+## Environment Variables
+
+See `.env.example` for full documentation. Key variables:
+
+| Variable                | Required | Purpose                                   |
+| ----------------------- | -------- | ----------------------------------------- |
+| `APP_ENV`               | Yes      | `devtest` / `stage` / `prod`              |
+| `REGISTRY_GRPC_URL`     | Yes      | gRPC backend (default: `localhost:50052`) |
+| `NEXTAUTH_URL`          | Yes      | OAuth callback URL                        |
+| `NEXTAUTH_SECRET`       | Yes      | JWT signing secret (32+ chars)            |
+| `GOOGLE_CLIENT_ID`      | Prod     | Google OAuth client ID                    |
+| `GOOGLE_CLIENT_SECRET`  | Prod     | Google OAuth secret                       |
+| `KEY_ENCRYPTION_KEY`    | Keys     | Envelope encryption key (32 bytes)        |
+| `ALLOWED_EMAIL_DOMAINS` | Prod     | Restrict OAuth to domains                 |
 
 ## Deployment
 
-Deployed to Cloudflare Pages at **portal.ciris.ai**.
+### Cloudflare Pages
 
 ```bash
-# Build and deploy
-pnpm deploy
+# Set secrets
+wrangler secret put NEXTAUTH_SECRET --env production
+wrangler secret put GOOGLE_CLIENT_ID --env production
+wrangler secret put GOOGLE_CLIENT_SECRET --env production
+wrangler secret put KEY_ENCRYPTION_KEY --env production
+
+# Deploy
+npm run deploy
 ```
 
 ## Project Structure
@@ -63,72 +97,64 @@ CIRISPortal/
 │   ├── (auth)/                # Login pages
 │   ├── (dashboard)/           # Protected routes
 │   │   ├── dashboard/         # Overview
-│   │   ├── organizations/     # Org management (admin)
-│   │   ├── partners/          # Partner records
+│   │   ├── admin/             # Admin pages (agents, incidents, partners)
 │   │   ├── keys/              # Key custody management
 │   │   ├── audit/             # Audit log viewer
+│   │   ├── webhooks/          # Webhook management
 │   │   └── settings/          # Settings
-│   └── api/auth/              # NextAuth routes
+│   └── api/
+│       ├── auth/              # NextAuth routes
+│       ├── admin/             # Admin API (agents, emergency, revoke)
+│       ├── registry/          # Registry API proxy
+│       └── webhooks/          # Webhook API
 ├── components/
 │   ├── layouts/               # Sidebar, Header
 │   └── ui/                    # shadcn/ui components
 ├── lib/
-│   ├── auth/                  # Auth utilities
+│   ├── auth/                  # Auth utilities + test users
+│   ├── grpc/                  # gRPC client for CIRISRegistry
 │   ├── keystore/              # Key custody (KV + future HSM)
-│   └── registry-sdk/          # CIRISRegistry API client
-└── ...
+│   └── registry-sdk/          # React Query hooks
+└── middleware.ts              # Auth protection for routes
 ```
 
-## Environment Variables
+## Security
 
-```env
-# Required
-NEXT_PUBLIC_API_URL=https://api.registry.ciris.ai
-NEXTAUTH_URL=https://portal.ciris.ai
-NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
-GOOGLE_CLIENT_ID=<your-google-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-client-secret>
-
-# Key Custody
-KEY_ENCRYPTION_KEY=<generate with: openssl rand -base64 32>
-```
+- All API routes require authentication (except `/api/registry/health`)
+- Security headers: X-Frame-Options, CSP, X-Content-Type-Options, etc.
+- Envelope encryption for custodied keys (AES-256-GCM)
+- Domain restrictions for OAuth in production
 
 ## Roles
 
-| Role          | Scope   | Can Do                                |
-| ------------- | ------- | ------------------------------------- |
-| Admin         | Global  | Create orgs, manage all users, revoke |
-| Partner Admin | Own org | Manage keys, invite org users         |
-| Partner User  | Own org | Read-only access                      |
-
-## Key Custody
-
-Partners can:
-
-1. **Self-custody** - Generate own keys, register public keys
-2. **Custodied** - We generate and hold keys, partner accesses via portal
-
-Custodied keys use envelope encryption (AES-256-GCM) with storage abstracted behind a `KeyStore` interface for future HSM/Vault migration.
+| Role          | Scope   | Capabilities                                   |
+| ------------- | ------- | ---------------------------------------------- |
+| Admin         | Global  | Create orgs, manage agents, emergency controls |
+| Partner Admin | Own org | Manage keys, invite org users                  |
+| Partner User  | Own org | Read-only access                               |
 
 ## Development Status
 
 **Version**: 0.1.0 (January 2026)
 
-### Current (v0.1.0)
+### Completed
 
-- [ ] Google OAuth integration
-- [ ] Organization CRUD
-- [ ] User invitation flow
-- [ ] Key generation (Ed25519 + ML-DSA-65)
-- [ ] Cloudflare KV key storage
-- [ ] Basic audit logging
+- [x] NextAuth integration (Google OAuth + test credentials)
+- [x] gRPC integration with CIRISRegistry v1.1.0
+- [x] Agent registry management
+- [x] Emergency shutdown controls
+- [x] Mass revocation interface
+- [x] Webhook management
+- [x] License expiry monitoring
+- [x] Security headers and API protection
+- [x] Ed25519 key generation (WebCrypto)
+- [x] Envelope encryption implementation
 
-### Planned (v0.2.0)
+### In Progress
 
-- [ ] Partner license display
-- [ ] Key rotation workflow
-- [ ] Enhanced audit viewer
-- [ ] Wise Authority deferral queue
+- [ ] ML-DSA-65 post-quantum key generation
+- [ ] Full key rotation workflow
+- [ ] Audit log viewer with verification
 
 ## License
 

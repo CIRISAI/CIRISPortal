@@ -1,7 +1,7 @@
 # CIRISPortal - Development Status & TODOs
 
 **Last Updated:** 2026-01-26
-**Status:** Scaffolding Complete, Awaiting Implementation
+**Status:** Core Features Complete, Polish Phase
 
 ---
 
@@ -9,15 +9,24 @@
 
 ### Completed
 
-- [x] Project scaffolding from SageGUI
-- [x] Updated branding (CIRISPortal, emerald theme)
-- [x] New navigation structure (Organizations, Partners, Keys, Audit)
-- [x] Stub pages for all sections
-- [x] KeyStore interface with Cloudflare KV implementation (placeholder)
-- [x] Terraform configuration for Cloudflare Pages + KV
-- [x] Ansible playbook with CIRISBridge integration
-- [x] Environment configuration (.env.example, wrangler.toml)
-- [x] CLAUDE.md development guide
+- [x] Project scaffolding and branding
+- [x] Next.js 15 App Router structure
+- [x] NextAuth integration (Google OAuth + test credentials)
+- [x] gRPC integration with CIRISRegistry v1.1.0
+- [x] Middleware auth protection for all routes
+- [x] Security headers (X-Frame-Options, CSP, etc.)
+- [x] Environment configuration (devtest/stage/prod modes)
+- [x] Dashboard with status cards
+- [x] Agent registry management (register, list, search)
+- [x] Emergency shutdown controls
+- [x] Mass revocation interface
+- [x] Webhook management
+- [x] Partner activity monitoring
+- [x] License expiry tracking
+- [x] KeyStore interface with envelope encryption
+- [x] Ed25519 key generation (WebCrypto)
+- [x] React Query SDK for data fetching
+- [x] shadcn/ui component library
 
 ---
 
@@ -25,177 +34,115 @@
 
 ### P0 - Critical Path
 
-#### Authentication
+#### Post-Quantum Cryptography
 
-- [ ] Wire up NextAuth with Google OAuth provider
-  - File: `app/api/auth/[...nextauth]/route.ts`
-  - Deps: Google OAuth credentials in Cloudflare secrets
-- [ ] Create auth middleware for route protection
-  - File: `middleware.ts`
-- [ ] Add session handling compatible with Cloudflare Workers
-  - May need KV-based session storage
-
-#### KeyStore Implementation
-
-- [ ] Implement actual Ed25519 key generation (WebCrypto)
-  - File: `lib/keystore/cloudflare-kv.ts`
 - [ ] Implement ML-DSA-65 key generation
-  - **BLOCKER:** Need post-quantum crypto library compatible with CF Workers
-  - Options: liboqs-js, pqcrypto-wasm, or custom implementation
-- [ ] Implement envelope encryption (AES-256-GCM)
-- [ ] Implement key signing operations
-- [ ] Add key rotation with grace period logic
+  - **BLOCKER:** Need post-quantum crypto library compatible with Cloudflare Workers
+  - Options: liboqs-wasm, pqcrypto-wasm
+  - File: `lib/keystore/crypto.ts`
+
+#### Key Operations
+
+- [ ] Full key rotation workflow with grace period
+- [ ] Key signing endpoint for custodied keys
+- [ ] Key escrow recovery flow
 
 ### P1 - Core Functionality
 
+#### Audit Page
+
+- [ ] Connect to audit gRPC methods
+- [ ] Signature verification UI
+- [ ] Export functionality (CSV, JSON)
+- [ ] Advanced filtering
+
 #### Organizations Page
 
-- [ ] Create new organization form
-- [ ] Organization detail view
+- [ ] Organization CRUD operations
 - [ ] User invitation flow
 - [ ] License type selection
 
-#### Partners Page
+#### Settings Page
 
-- [ ] Connect to CIRISRegistry API for partner records
-- [ ] Display capability grants
-- [ ] License status and expiry warnings
-
-#### Keys Page
-
-- [ ] Connect to KeyStore for real key operations
-- [ ] Public key export/download
-- [ ] Key rotation UI with confirmation
-- [ ] Display signing history
-
-#### Audit Page
-
-- [ ] Connect to audit KV namespace
-- [ ] Signature verification UI
-- [ ] Export functionality
-- [ ] Filter and search
+- [ ] User profile management
+- [ ] Organization settings (for Partner Admins)
+- [ ] Notification preferences
 
 ### P2 - Polish & Integration
 
-#### API Integration
+#### UI Improvements
 
-- [ ] Replace `lib/ciris-sdk/` with registry-focused SDK
-- [ ] Add React Query hooks for data fetching
-- [ ] Error handling and loading states
+- [ ] Loading skeletons for all data fetching
+- [ ] Better error messages with retry
+- [ ] Mobile responsive design
+- [ ] Dark mode support
 
-#### UI Components
+#### Testing
 
-- [ ] Add shadcn/ui components
-- [ ] Form validation with Zod
-- [ ] Toast notifications
-- [ ] Loading skeletons
+- [ ] Unit tests for crypto functions
+- [ ] Integration tests for gRPC client
+- [ ] E2E tests with Playwright
 
-#### Settings Page
+#### Monitoring
 
-- [ ] Update from SageGUI GDPR settings to Portal settings
-- [ ] User profile management
-- [ ] Organization settings (for Partner Admins)
-
----
-
-## Dependencies on CIRISRegistry
-
-### API Endpoints Required
-
-CIRISPortal depends on the following CIRISRegistry API endpoints:
-
-| Endpoint                       | Method   | Purpose                    | Status     |
-| ------------------------------ | -------- | -------------------------- | ---------- |
-| `/v1/partners/{id}`            | GET      | Fetch partner record       | **NEEDED** |
-| `/v1/partners`                 | POST     | Create partner record      | **NEEDED** |
-| `/v1/partners/{id}`            | PATCH    | Update partner record      | **NEEDED** |
-| `/v1/agents/{hash}`            | GET      | Lookup agent (for display) | Spec'd     |
-| `/v1/revocations`              | GET      | Get revocation list        | Spec'd     |
-| `/v1/organizations`            | GET/POST | Org management             | **NEEDED** |
-| `/v1/organizations/{id}/users` | GET/POST | User management            | **NEEDED** |
-
-### Proto Additions Needed
-
-CIRISRegistry's `ciris_registry.proto` may need:
-
-```protobuf
-// Organization management (not in current spec)
-message Organization {
-  string org_id = 1;
-  string name = 2;
-  repeated string admin_emails = 10;
-  repeated PartnerRecord partners = 20;
-  // ...
-}
-
-// User management
-message OrgUser {
-  string user_id = 1;
-  string email = 2;
-  OrgRole role = 3;
-  string org_id = 4;
-}
-
-enum OrgRole {
-  ORG_ROLE_UNSPECIFIED = 0;
-  ORG_ADMIN = 1;
-  ORG_USER = 2;
-}
-```
-
-### Signing Key Registration
-
-When CIRISPortal generates custodied keys, the public keys need to be registered with CIRISRegistry:
-
-```
-Portal generates key → Registers public key with Registry → Registry includes in PartnerRecord
-```
-
-This requires a key registration endpoint:
-
-- `POST /v1/partners/{id}/keys` - Register public key
-- `DELETE /v1/partners/{id}/keys/{key_id}` - Revoke key
+- [ ] Error tracking (Sentry)
+- [ ] Analytics integration
+- [ ] Performance monitoring
 
 ---
 
-## Infrastructure Dependencies
+## API Endpoints
 
-### CIRISBridge Integration
+### Implemented
 
-CIRISBridge needs the following for CIRISPortal deployment:
+| Endpoint                                     | Method   | Purpose               | Status |
+| -------------------------------------------- | -------- | --------------------- | ------ |
+| `/api/admin/agents`                          | GET/POST | Agent management      | Done   |
+| `/api/admin/emergency`                       | GET/POST | Emergency controls    | Done   |
+| `/api/admin/revoke`                          | GET/POST | Revocation list       | Done   |
+| `/api/admin/partners`                        | GET      | Partner listing       | Done   |
+| `/api/webhooks`                              | GET/POST | Webhook management    | Done   |
+| `/api/registry/health`                       | GET      | Health check (public) | Done   |
+| `/api/registry/keys`                         | GET/POST | Key operations        | Done   |
+| `/api/registry/users`                        | GET/POST | User management       | Done   |
+| `/api/registry/audit`                        | GET      | Audit log             | Done   |
+| `/api/registry/admin/licenses/expiring`      | GET      | Expiring licenses     | Done   |
+| `/api/registry/registry/partners/[id]`       | GET      | Partner lookup        | Done   |
+| `/api/registry/admin/partners/[id]/activity` | GET      | Partner activity      | Done   |
 
-1. **Vault Secrets Path:** `secret/data/ciris/portal`
-   - cloudflare_api_token
-   - cloudflare_account_id
-   - cloudflare_zone_id
-   - google_client_id
-   - google_client_secret
-   - nextauth_secret
-   - key_encryption_key
+### Pending
 
-2. **DNS Management:** CNAME for `portal.ciris.ai`
-
-3. **Terraform State:** S3 backend configuration for state storage
-
-### Google OAuth Setup
-
-1. Create OAuth 2.0 Client ID in Google Cloud Console
-2. Add authorized redirect URIs:
-   - `https://portal.ciris.ai/api/auth/callback/google`
-   - `http://localhost:3000/api/auth/callback/google` (dev)
-3. Store credentials in CIRISBridge Vault
+| Endpoint                  | Method | Purpose                 | Blocked By |
+| ------------------------- | ------ | ----------------------- | ---------- |
+| `/api/registry/keys/sign` | POST   | Sign with custodied key | ML-DSA-65  |
 
 ---
 
-## Open Questions
+## Infrastructure
 
-1. **ML-DSA-65 in Workers:** Which library for post-quantum crypto in Cloudflare Workers environment?
+### Cloudflare Secrets Required
 
-2. **Key Custody Consent:** Do we need explicit consent UI before generating custodied keys?
+```bash
+wrangler secret put NEXTAUTH_SECRET --env production
+wrangler secret put GOOGLE_CLIENT_ID --env production
+wrangler secret put GOOGLE_CLIENT_SECRET --env production
+wrangler secret put KEY_ENCRYPTION_KEY --env production
+```
 
-3. **Audit Retention:** How long to retain audit logs in KV? Cost implications?
+### KV Namespace Setup
 
-4. **Multi-tenancy:** Should the portal support multiple CIRIS deployments or just ciris.ai?
+```bash
+wrangler kv:namespace create KEYS
+# Add the ID to wrangler.toml
+```
+
+---
+
+## Known Issues
+
+1. **ML-DSA-65 not implemented** - Waiting for WASM library compatible with Cloudflare Workers
+2. **Audit verification UI missing** - Need to implement signature verification display
+3. **Key rotation grace period** - Backend supports it, UI needs work
 
 ---
 
@@ -204,34 +151,32 @@ CIRISBridge needs the following for CIRISPortal deployment:
 ```
 CIRISPortal/
 ├── app/
+│   ├── (auth)/login/              # Login page
 │   ├── (dashboard)/
-│   │   ├── audit/page.tsx           # Audit log viewer
-│   │   ├── dashboard/page.tsx       # Overview dashboard
-│   │   ├── keys/page.tsx            # Key management
-│   │   ├── organizations/page.tsx   # Org management
-│   │   ├── partners/page.tsx        # Partner records
-│   │   └── settings/page.tsx        # Settings
-│   ├── api/auth/                    # TODO: NextAuth routes
-│   └── ...
-├── components/layouts/
-│   ├── header.tsx
-│   └── sidebar.tsx
+│   │   ├── dashboard/             # Overview dashboard
+│   │   ├── admin/
+│   │   │   ├── agents/            # Agent registry
+│   │   │   ├── incidents/         # Emergency controls
+│   │   │   └── partners/          # Partner management
+│   │   ├── audit/                 # Audit log viewer
+│   │   ├── keys/                  # Key management
+│   │   ├── users/                 # User management
+│   │   ├── webhooks/              # Webhooks
+│   │   ├── verify/                # Agent verification
+│   │   └── settings/              # Settings
+│   └── api/                       # API routes
+├── components/
+│   ├── dashboard/                 # Dashboard cards
+│   ├── layouts/                   # Sidebar, Header
+│   └── ui/                        # shadcn/ui components
 ├── lib/
-│   ├── keystore/                    # Key custody abstraction
-│   │   ├── cloudflare-kv.ts         # KV implementation
-│   │   ├── factory.ts               # Store factory
-│   │   ├── index.ts
-│   │   └── types.ts                 # Interfaces
-│   └── ciris-sdk/                   # TODO: Replace with registry SDK
-├── deploy/
-│   ├── ansible/
-│   │   ├── playbook.yml             # Main deployment
-│   │   ├── cirisbridge.yml          # CIRISBridge integration
-│   │   ├── vars/
-│   │   └── inventory/
-│   └── terraform/
-│       └── main.tf                  # Cloudflare infrastructure
-├── CLAUDE.md                        # AI development guide
-├── README.md
-└── TODO.md                          # This file
+│   ├── auth/                      # Auth config + test users
+│   ├── grpc/                      # gRPC client
+│   ├── keystore/                  # Key custody
+│   └── registry-sdk/              # React Query hooks
+├── middleware.ts                  # Auth middleware
+├── .env.example                   # Environment template
+├── wrangler.toml                  # Cloudflare config
+├── CLAUDE.md                      # Dev guide
+└── TODO.md                        # This file
 ```
