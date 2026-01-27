@@ -561,3 +561,21 @@ export async function listExpiringLicenses(params: {
     ...params,
   });
 }
+
+// Agent Registry
+export async function listRegisteredAgents(params: {
+  agentType?: string;
+  status?: string;
+  versionPrefix?: string;
+  searchQuery?: string;
+  includeTestRecords?: boolean;
+  pageSize?: number;
+  pageToken?: string;
+  orderBy?: string;
+  descending?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getAdminClient(), 'listRegisteredAgents', {
+    context: buildContext(),
+    ...params,
+  });
+}

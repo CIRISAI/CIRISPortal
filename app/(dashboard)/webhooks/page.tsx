@@ -47,12 +47,12 @@ import {
   Copy,
   Check,
   RefreshCw,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
   ExternalLink,
+  AlertOctagon,
 } from 'lucide-react';
 import { TEST_ORG_ID } from '@/lib/test-config';
+import { toast } from '@/lib/hooks/use-toast';
 
 interface WebhookConfig {
   id: string;
@@ -157,6 +157,76 @@ const EVENT_CATEGORIES = [
   },
 ];
 
+// Error Display Component
+function ErrorBanner({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <Card className="border-red-300 bg-red-50">
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-4">
+          <AlertOctagon className="h-6 w-6 flex-shrink-0 text-red-600" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-800">API Error</h3>
+            <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-red-700">
+              {error}
+            </p>
+            <p className="mt-2 text-xs text-red-600">
+              Check browser console and server logs for details.
+            </p>
+          </div>
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="border-red-300"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// API fetch functions
+async function fetchWebhooks(orgId: string): Promise<WebhookConfig[]> {
+  console.log(
+    '[Webhooks] Fetching webhooks from /api/webhooks for org:',
+    orgId
+  );
+  const response = await fetch(
+    `/api/webhooks?org_id=${encodeURIComponent(orgId)}`
+  );
+  const data = await response.json();
+  console.log('[Webhooks] Response:', response.status, data);
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || `Failed to fetch webhooks: ${response.status}`
+    );
+  }
+
+  // Map backend response to our interface
+  return (data.webhooks || []).map((wh: any) => ({
+    id: wh.webhookId || wh.id || '',
+    url: wh.url || '',
+    subscribedEvents: wh.events || wh.subscribedEvents || [],
+    active: wh.active !== false,
+    signingSecret: wh.signingSecret || wh.secret || '',
+    lastTriggeredAt: wh.lastTriggeredAt,
+    consecutiveFailures: wh.consecutiveFailures || 0,
+    createdAt: wh.createdAt || String(Math.floor(Date.now() / 1000)),
+  }));
+}
+
 function maskUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -220,74 +290,140 @@ export default function WebhooksPage() {
     active: true,
   });
 
-  // Fetch webhooks (mock data for now)
-  const { data: webhooks, isLoading } = useQuery<WebhookConfig[]>({
+  // Fetch webhooks from real API
+  const {
+    data: webhooks,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<WebhookConfig[], Error>({
     queryKey: ['webhooks', TEST_ORG_ID],
-    queryFn: async () => {
-      // Mock data - replace with actual API call
-      return [
-        {
-          id: 'wh_1',
-          url: 'https://api.example.com/webhooks/ciris',
-          subscribedEvents: ['key.generated', 'key.rotated', 'key.revoked'],
-          active: true,
-          signingSecret: 'whsec_abc123xyz789',
-          lastTriggeredAt: String(Math.floor(Date.now() / 1000) - 3600),
-          consecutiveFailures: 0,
-          createdAt: String(Math.floor(Date.now() / 1000) - 86400 * 30),
-        },
-        {
-          id: 'wh_2',
-          url: 'https://slack.com/api/webhooks/T123/B456/abcdef',
-          subscribedEvents: ['emergency.shutdown', 'emergency.cleared'],
-          active: true,
-          signingSecret: 'whsec_def456abc123',
-          lastTriggeredAt: undefined,
-          consecutiveFailures: 0,
-          createdAt: String(Math.floor(Date.now() / 1000) - 86400 * 7),
-        },
-      ];
-    },
+    queryFn: () => fetchWebhooks(TEST_ORG_ID),
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
   // Create webhook mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof newWebhook) => {
-      // TODO: Call actual API
-      console.log('Creating webhook:', data);
-      return {
-        id: 'wh_new',
-        ...data,
-        signingSecret: 'whsec_new123',
-        consecutiveFailures: 0,
-        createdAt: String(Date.now() / 1000),
-      };
+      console.log('[Webhooks] Creating webhook:', data);
+      const response = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CREATE',
+          orgId: TEST_ORG_ID,
+          url: data.url,
+          events: data.events,
+        }),
+      });
+      const result = await response.json();
+      console.log('[Webhooks] Create response:', response.status, result);
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Failed to create webhook: ${response.status}`
+        );
+      }
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
       setIsCreateOpen(false);
       setNewWebhook({ url: '', events: [], active: true });
+      toast({
+        title: 'Webhook Created',
+        description: data.signingSecret
+          ? "Save your signing secret - it won't be shown again!"
+          : 'Webhook endpoint registered',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      console.error('[Webhooks] Create error:', error);
+      toast({
+        title: 'Create Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
     },
   });
 
   // Delete webhook mutation
   const deleteMutation = useMutation({
     mutationFn: async (webhookId: string) => {
-      // TODO: Call actual API
-      console.log('Deleting webhook:', webhookId);
+      console.log('[Webhooks] Deleting webhook:', webhookId);
+      const response = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE',
+          orgId: TEST_ORG_ID,
+          webhookId,
+        }),
+      });
+      const result = await response.json();
+      console.log('[Webhooks] Delete response:', response.status, result);
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Failed to delete webhook: ${response.status}`
+        );
+      }
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+      toast({
+        title: 'Webhook Deleted',
+        description: 'Endpoint removed',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      console.error('[Webhooks] Delete error:', error);
+      toast({
+        title: 'Delete Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
     },
   });
 
   // Test webhook mutation
   const testMutation = useMutation({
     mutationFn: async (webhookId: string) => {
-      // TODO: Call actual API
-      console.log('Testing webhook:', webhookId);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      return { success: true };
+      console.log('[Webhooks] Testing webhook:', webhookId);
+      const response = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'TEST',
+          webhookId,
+        }),
+      });
+      const result = await response.json();
+      console.log('[Webhooks] Test response:', response.status, result);
+
+      if (!response.ok) {
+        throw new Error(result.error || `Test failed: ${response.status}`);
+      }
+      return result;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Test Sent',
+        description: `Response: ${data.statusCode || 200} (${data.responseTime || 0}ms)`,
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      console.error('[Webhooks] Test error:', error);
+      toast({
+        title: 'Test Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
     },
   });
 
@@ -424,6 +560,9 @@ export default function WebhooksPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Error Banner */}
+      {error && <ErrorBanner error={error.message} onRetry={() => refetch()} />}
 
       {/* Webhooks List */}
       <Card>

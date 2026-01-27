@@ -122,49 +122,127 @@ const REASON_CODES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-// Mock data for development
-const mockEmergencyStatus: EmergencyStatus = {
-  isLocked: false,
-  severity: '',
-  reason: '',
-  lockedAt: '',
-  lockedBy: '',
-  unlockAt: null,
-  allowedOperations: [],
-};
+// Error Display Component
+function ErrorBanner({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <Card className="border-red-300 bg-red-50">
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-4">
+          <AlertOctagon className="h-6 w-6 flex-shrink-0 text-red-600" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-800">API Error</h3>
+            <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-red-700">
+              {error}
+            </p>
+            <p className="mt-2 text-xs text-red-600">
+              Check browser console and server logs for details.
+            </p>
+          </div>
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="border-red-300"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-const mockRevocations: RevocationEntry[] = [
-  {
-    id: 'rev_001',
-    targetType: 'AGENT',
-    targetId: 'd4e5f67890123456789012345678901234567890123456789012345def123',
-    reason: 'Critical vulnerability in code execution capability',
-    reasonCode: 'VULNERABILITY',
-    severity: 'HIGH',
-    revokedAt: '1706227200',
-    revokedBy: 'admin@ciris.ai',
-  },
-  {
-    id: 'rev_002',
-    targetType: 'PARTNER',
-    targetId: 'org_compromised_corp',
-    reason: 'Key compromise suspected',
-    reasonCode: 'KEY_COMPROMISE',
-    severity: 'CRITICAL',
-    revokedAt: '1706140800',
-    revokedBy: 'security@ciris.ai',
-  },
-  {
-    id: 'rev_003',
-    targetType: 'LICENSE',
-    targetId: 'lic_expired_partner',
-    reason: 'License terms violation',
-    reasonCode: 'COMPLIANCE',
-    severity: 'MEDIUM',
-    revokedAt: '1705968000',
-    revokedBy: 'admin@ciris.ai',
-  },
-];
+// API fetch functions
+async function fetchEmergencyStatus(): Promise<EmergencyStatus> {
+  console.log(
+    '[Incidents] Fetching emergency status from /api/admin/emergency'
+  );
+  const response = await fetch('/api/admin/emergency');
+  const data = await response.json();
+  console.log('[Incidents] Emergency status response:', response.status, data);
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || `Failed to fetch emergency status: ${response.status}`
+    );
+  }
+
+  return {
+    isLocked: data.isLocked || false,
+    severity: data.severity || '',
+    reason: data.reason || '',
+    lockedAt: data.lockedAt || '',
+    lockedBy: data.lockedBy || '',
+    unlockAt: data.unlockAt || null,
+    allowedOperations: data.allowedOperations || [],
+  };
+}
+
+async function fetchRevocations(params: {
+  searchQuery?: string;
+  typeFilter?: string;
+  severityFilter?: string;
+}): Promise<{ entries: RevocationEntry[]; totalCount: number }> {
+  console.log('[Incidents] Fetching revocations from /api/admin/revoke');
+  const response = await fetch('/api/admin/revoke');
+  const data = await response.json();
+  console.log('[Incidents] Revocations response:', response.status, data);
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || `Failed to fetch revocations: ${response.status}`
+    );
+  }
+
+  // Map backend entries to our format
+  let entries: RevocationEntry[] = (data.entries || []).map(
+    (entry: any, index: number) => ({
+      id: entry.id || `rev_${index}`,
+      targetType: entry.targetType || 'AGENT',
+      targetId: entry.targetId || entry.agentHash || entry.partnerId || '',
+      reason: entry.reason || '',
+      reasonCode: entry.reasonCode || 'OTHER',
+      severity: entry.severity || 'MEDIUM',
+      revokedAt:
+        entry.revokedAt ||
+        entry.timestamp ||
+        String(Math.floor(Date.now() / 1000)),
+      revokedBy: entry.revokedBy || 'system',
+    })
+  );
+
+  // Apply client-side filters
+  if (params.searchQuery) {
+    const query = params.searchQuery.toLowerCase();
+    entries = entries.filter(
+      (r) =>
+        r.targetId.toLowerCase().includes(query) ||
+        r.reason.toLowerCase().includes(query)
+    );
+  }
+
+  if (params.typeFilter && params.typeFilter !== 'all') {
+    entries = entries.filter((r) => r.targetType === params.typeFilter);
+  }
+
+  if (params.severityFilter && params.severityFilter !== 'all') {
+    entries = entries.filter((r) => r.severity === params.severityFilter);
+  }
+
+  return {
+    entries,
+    totalCount: entries.length,
+  };
+}
 
 function SeverityBadge({ severity }: { severity: string }) {
   const config = SEVERITY_LEVELS.find((s) => s.value === severity) || {
@@ -473,6 +551,51 @@ function EmergencyShutdownDialog({ isActive }: { isActive: boolean }) {
   );
 }
 
+// Helper to build mass revoke request body
+function buildRevokeRequest(
+  formData: {
+    selectionMethod: string;
+    input: string;
+    reason: string;
+    reasonCode: string;
+    severity: string;
+    incidentId: string;
+  },
+  isDryRun: boolean
+) {
+  const request: Record<string, unknown> = {
+    reason: formData.reason,
+    reasonCode: formData.reasonCode,
+    severity: formData.severity,
+    isDryRun,
+  };
+
+  switch (formData.selectionMethod) {
+    case 'hashes':
+      request.agentHashes = formData.input
+        .split('\n')
+        .map((h) => h.trim())
+        .filter(Boolean);
+      break;
+    case 'partners':
+      request.partnerIds = formData.input
+        .split('\n')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      break;
+    case 'version':
+      request.versionPattern = formData.input.trim();
+      break;
+    case 'type':
+      request.agentType = formData.input;
+      break;
+    default:
+      break;
+  }
+
+  return request;
+}
+
 // Mass Revocation Dialog
 function MassRevocationDialog() {
   const [open, setOpen] = useState(false);
@@ -493,15 +616,30 @@ function MassRevocationDialog() {
 
   const previewMutation = useMutation({
     mutationFn: async () => {
-      // Simulate preview API call
-      await new Promise((r) => setTimeout(r, 1000));
+      console.log('[MassRevoke] Running dry-run preview');
+      const requestBody = buildRevokeRequest(formData, true);
+      console.log('[MassRevoke] Preview request:', requestBody);
+
+      const response = await fetch('/api/admin/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+      const data = await response.json();
+      console.log('[MassRevoke] Preview response:', response.status, data);
+
+      if (!response.ok) {
+        throw new Error(data.error || `Preview failed: ${response.status}`);
+      }
+
       return {
-        count: 15,
+        count: data.revokedCount || 0,
         breakdown: [
-          { type: 'Agents', count: 10 },
-          { type: 'Partners', count: 3 },
-          { type: 'Licenses', count: 2 },
+          { type: 'Agents', count: data.affectedAgents?.length || 0 },
+          { type: 'Partners', count: data.affectedPartners?.length || 0 },
         ],
+        affectedAgents: data.affectedAgents || [],
+        affectedPartners: data.affectedPartners || [],
       };
     },
     onSuccess: (data) => {
@@ -509,8 +647,9 @@ function MassRevocationDialog() {
       setStep('preview');
     },
     onError: (error: Error) => {
+      console.error('[MassRevoke] Preview error:', error);
       toast({
-        title: 'Error',
+        title: 'Preview Failed',
         description: error.message,
         variant: 'destructive',
       });
@@ -519,30 +658,37 @@ function MassRevocationDialog() {
 
   const revokeMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/admin/mass-revoke', {
+      console.log('[MassRevoke] Executing revocation');
+      const requestBody = buildRevokeRequest(formData, false);
+      console.log('[MassRevoke] Revoke request:', requestBody);
+
+      const response = await fetch('/api/admin/revoke', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          isDryRun: false,
-        }),
+        body: JSON.stringify(requestBody),
       });
-      if (!response.ok) throw new Error('Mass revocation failed');
-      return response.json();
+      const data = await response.json();
+      console.log('[MassRevoke] Revoke response:', response.status, data);
+
+      if (!response.ok) {
+        throw new Error(data.error || `Revocation failed: ${response.status}`);
+      }
+      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['revocations'] });
       toast({
-        title: 'Success',
-        description: `Revoked ${data.revokedCount} entries. Audit log: ${data.auditLogId}`,
+        title: 'Revocation Complete',
+        description: `Revoked ${data.revokedCount || 0} entries. Audit log: ${data.auditLogId || 'N/A'}`,
         variant: 'success',
       });
       setOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
+      console.error('[MassRevoke] Revoke error:', error);
       toast({
-        title: 'Error',
+        title: 'Revocation Failed',
         description: error.message,
         variant: 'destructive',
       });
@@ -863,50 +1009,38 @@ export default function IncidentResponsePage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
 
-  // Mock queries - replace with actual API calls
-  const { data: emergencyStatus, isLoading: loadingStatus } = useQuery({
+  // Real API queries
+  const {
+    data: emergencyStatus,
+    isLoading: loadingStatus,
+    error: emergencyError,
+    refetch: refetchEmergency,
+  } = useQuery<EmergencyStatus, Error>({
     queryKey: ['emergency-status'],
-    queryFn: async () => {
-      await new Promise((r) => setTimeout(r, 300));
-      return mockEmergencyStatus;
-    },
+    queryFn: fetchEmergencyStatus,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
   const {
     data: revocations,
     isLoading: loadingRevocations,
+    error: revocationsError,
     refetch,
-  } = useQuery({
+  } = useQuery<{ entries: RevocationEntry[]; totalCount: number }, Error>({
     queryKey: ['revocations', searchQuery, typeFilter, severityFilter],
-    queryFn: async () => {
-      await new Promise((r) => setTimeout(r, 500));
-
-      let filtered = [...mockRevocations];
-
-      if (searchQuery) {
-        filtered = filtered.filter(
-          (r) =>
-            r.targetId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            r.reason.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-
-      if (typeFilter !== 'all') {
-        filtered = filtered.filter((r) => r.targetType === typeFilter);
-      }
-
-      if (severityFilter !== 'all') {
-        filtered = filtered.filter((r) => r.severity === severityFilter);
-      }
-
-      return {
-        entries: filtered,
-        totalCount: filtered.length,
-      };
-    },
+    queryFn: () =>
+      fetchRevocations({
+        searchQuery,
+        typeFilter,
+        severityFilter,
+      }),
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
   const isEmergencyActive = emergencyStatus?.isLocked || false;
+  const allRevocations = revocations?.entries || [];
 
   return (
     <div className="space-y-6 p-6">
@@ -951,6 +1085,20 @@ export default function IncidentResponsePage() {
         </div>
       </div>
 
+      {/* Error Banners */}
+      {emergencyError && (
+        <ErrorBanner
+          error={emergencyError.message}
+          onRetry={() => refetchEmergency()}
+        />
+      )}
+      {revocationsError && (
+        <ErrorBanner
+          error={revocationsError.message}
+          onRetry={() => refetch()}
+        />
+      )}
+
       {/* Status Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -983,7 +1131,9 @@ export default function IncidentResponsePage() {
                 <p className="text-sm text-muted-foreground">
                   Total Revocations
                 </p>
-                <p className="text-2xl font-bold">{mockRevocations.length}</p>
+                <p className="text-2xl font-bold">
+                  {loadingRevocations ? '-' : allRevocations.length}
+                </p>
               </div>
               <XCircle className="h-8 w-8 text-red-600" />
             </div>
@@ -995,10 +1145,10 @@ export default function IncidentResponsePage() {
               <div>
                 <p className="text-sm text-muted-foreground">Critical</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {
-                    mockRevocations.filter((r) => r.severity === 'CRITICAL')
-                      .length
-                  }
+                  {loadingRevocations
+                    ? '-'
+                    : allRevocations.filter((r) => r.severity === 'CRITICAL')
+                        .length}
                 </p>
               </div>
               <AlertOctagon className="h-8 w-8 text-red-600" />
@@ -1011,11 +1161,11 @@ export default function IncidentResponsePage() {
               <div>
                 <p className="text-sm text-muted-foreground">Last 24h</p>
                 <p className="text-2xl font-bold">
-                  {
-                    mockRevocations.filter(
-                      (r) => Date.now() / 1000 - parseInt(r.revokedAt) < 86400
-                    ).length
-                  }
+                  {loadingRevocations
+                    ? '-'
+                    : allRevocations.filter(
+                        (r) => Date.now() / 1000 - parseInt(r.revokedAt) < 86400
+                      ).length}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-muted-foreground" />

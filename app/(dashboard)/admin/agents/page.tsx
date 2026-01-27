@@ -51,6 +51,7 @@ import {
   Loader2,
   RefreshCw,
   ExternalLink,
+  AlertOctagon,
 } from 'lucide-react';
 import { toast } from '@/lib/hooks/use-toast';
 
@@ -68,6 +69,7 @@ interface AgentRecord {
   maxAutonomyTier: string;
   registeredAt: string;
   hasAttestation: boolean;
+  attestation?: BuildAttestation;
 }
 
 interface BuildAttestation {
@@ -78,6 +80,56 @@ interface BuildAttestation {
   slsaLevel: number;
   signature: string;
   createdAt: string;
+}
+
+interface AgentsResponse {
+  agents: AgentRecord[];
+  totalCount: number;
+  stats?: {
+    registered: number;
+    deprecated: number;
+    revoked: number;
+    attested: number;
+  };
+}
+
+// Error Display Component
+function ErrorBanner({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <Card className="border-red-300 bg-red-50">
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-4">
+          <AlertOctagon className="h-6 w-6 flex-shrink-0 text-red-600" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-800">API Error</h3>
+            <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-red-700">
+              {error}
+            </p>
+            <p className="mt-2 text-xs text-red-600">
+              Check browser console and server logs for details.
+            </p>
+          </div>
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="border-red-300"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // Agent types and status mappings
@@ -135,62 +187,6 @@ const CAPABILITIES = [
   'CAP_REASONING',
 ];
 
-// Mock data for development
-const mockAgents: AgentRecord[] = [
-  {
-    agentHash:
-      'a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd',
-    agentType: 'AGENT_TYPE_CIRIS_CORE',
-    version: { major: 2, minor: 1, patch: 0 },
-    status: 'AGENT_STATUS_REGISTERED',
-    capabilities: ['CAP_TEXT_GENERATION', 'CAP_REASONING', 'CAP_TOOL_USE'],
-    maxAutonomyTier: 'AUTONOMY_TIER_A2',
-    registeredAt: '1706140800',
-    hasAttestation: true,
-  },
-  {
-    agentHash:
-      'b2c3d4e5f67890123456789012345678901234567890123456789012345bcd1',
-    agentType: 'AGENT_TYPE_CIRIS_LITE',
-    version: { major: 1, minor: 5, patch: 2 },
-    status: 'AGENT_STATUS_REGISTERED',
-    capabilities: ['CAP_TEXT_GENERATION', 'CAP_REASONING'],
-    maxAutonomyTier: 'AUTONOMY_TIER_A1',
-    registeredAt: '1705449600',
-    hasAttestation: true,
-  },
-  {
-    agentHash: 'c3d4e5f6789012345678901234567890123456789012345678901234cde12',
-    agentType: 'AGENT_TYPE_PARTNER',
-    version: { major: 1, minor: 0, patch: 0 },
-    status: 'AGENT_STATUS_DEPRECATED',
-    capabilities: ['CAP_TEXT_GENERATION'],
-    maxAutonomyTier: 'AUTONOMY_TIER_A0',
-    registeredAt: '1704067200',
-    hasAttestation: false,
-  },
-  {
-    agentHash: 'd4e5f67890123456789012345678901234567890123456789012345def123',
-    agentType: 'AGENT_TYPE_CUSTOM',
-    version: { major: 0, minor: 9, patch: 1 },
-    status: 'AGENT_STATUS_REVOKED',
-    capabilities: ['CAP_CODE_EXECUTION', 'CAP_FILE_SYSTEM'],
-    maxAutonomyTier: 'AUTONOMY_TIER_A1',
-    registeredAt: '1703462400',
-    hasAttestation: false,
-  },
-];
-
-const mockAttestation: BuildAttestation = {
-  buildType: 'GitHub Actions',
-  sourceRepo: 'https://github.com/CIRISAI/CIRISAgent',
-  commitHash: '8f4e2a1b3c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f',
-  builderId: 'github-hosted-runner-ubuntu-22.04',
-  slsaLevel: 3,
-  signature: 'MEUCIQDx...base64signature...==',
-  createdAt: '1706140800',
-};
-
 function formatVersion(version?: {
   major: number;
   minor: number;
@@ -201,13 +197,14 @@ function formatVersion(version?: {
 }
 
 function truncateHash(hash: string, length = 16) {
+  if (!hash) return '-';
   if (hash.length <= length) return hash;
   return `${hash.slice(0, length / 2)}...${hash.slice(-length / 2)}`;
 }
 
 function StatusBadge({ status }: { status: string }) {
   const config = STATUS_CONFIG[status] || {
-    label: status.replace('AGENT_STATUS_', ''),
+    label: status?.replace('AGENT_STATUS_', '') || 'Unknown',
     color: 'text-gray-700',
     bgColor: 'bg-gray-100',
   };
@@ -235,6 +232,7 @@ function RegisterAgentDialog() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      console.log('[RegisterAgent] Sending request:', data);
       const response = await fetch('/api/admin/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -250,8 +248,14 @@ function RegisterAgentDialog() {
           maxAutonomyTier: data.maxAutonomyTier,
         }),
       });
-      if (!response.ok) throw new Error('Registration failed');
-      return response.json();
+      const result = await response.json();
+      console.log('[RegisterAgent] Response:', response.status, result);
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Registration failed: ${response.status}`
+        );
+      }
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
@@ -264,8 +268,9 @@ function RegisterAgentDialog() {
       resetForm();
     },
     onError: (error: Error) => {
+      console.error('[RegisterAgent] Error:', error);
       toast({
-        title: 'Error',
+        title: 'Registration Failed',
         description: error.message,
         variant: 'destructive',
       });
@@ -458,8 +463,8 @@ function RegisterAgentDialog() {
 function BatchRegisterDialog() {
   const [open, setOpen] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
-  const [preview, setPreview] = useState<any[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<AgentRecord[] | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -482,43 +487,49 @@ function BatchRegisterDialog() {
         throw new Error('JSON must contain an "agents" array');
       }
       setPreview(data.agents);
-      setError(null);
-    } catch (err: any) {
+      setParseError(null);
+    } catch (err: unknown) {
       setPreview(null);
-      setError(err.message);
+      setParseError(err instanceof Error ? err.message : 'Invalid JSON');
     }
   };
 
   const batchMutation = useMutation({
-    mutationFn: async (agents: any[]) => {
-      const response = await fetch('/api/admin/agents/batch', {
+    mutationFn: async (agents: AgentRecord[]) => {
+      console.log(
+        '[BatchRegister] Sending request with',
+        agents.length,
+        'agents'
+      );
+      const response = await fetch('/api/admin/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agents }),
+        body: JSON.stringify({ batch: true, agents }),
       });
-      if (!response.ok) throw new Error('Batch registration failed');
-      return response.json();
+      const result = await response.json();
+      console.log('[BatchRegister] Response:', response.status, result);
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Batch registration failed: ${response.status}`
+        );
+      }
+      return result;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
       toast({
-        title: 'Success',
-        description: `Registered ${data.successCount} agents`,
-        variant: 'success',
+        title: 'Batch Complete',
+        description: `Registered ${data.successCount} agents${data.failureCount > 0 ? `, ${data.failureCount} failed` : ''}`,
+        variant: data.failureCount > 0 ? 'default' : 'success',
       });
-      if (data.failureCount > 0) {
-        toast({
-          title: 'Warning',
-          description: `${data.failureCount} agents failed`,
-        });
-      }
       setOpen(false);
       setJsonInput('');
       setPreview(null);
     },
     onError: (error: Error) => {
+      console.error('[BatchRegister] Error:', error);
       toast({
-        title: 'Error',
+        title: 'Batch Failed',
         description: error.message,
         variant: 'destructive',
       });
@@ -564,10 +575,10 @@ function BatchRegisterDialog() {
             />
           </div>
 
-          {error && (
+          {parseError && (
             <div className="flex items-center gap-2 text-sm text-red-600">
               <XCircle className="h-4 w-4" />
-              {error}
+              {parseError}
             </div>
           )}
 
@@ -593,9 +604,7 @@ function BatchRegisterDialog() {
                           {AGENT_TYPES[agent.agentType] || agent.agentType}
                         </td>
                         <td className="p-2">
-                          {agent.version
-                            ? `v${agent.version.major}.${agent.version.minor}.${agent.version.patch}`
-                            : '-'}
+                          {agent.version ? formatVersion(agent.version) : '-'}
                         </td>
                       </tr>
                     ))}
@@ -636,17 +645,9 @@ function BatchRegisterDialog() {
 }
 
 // Build Attestation Dialog
-function AttestationDialog({ agentHash }: { agentHash: string }) {
+function AttestationDialog({ agent }: { agent: AgentRecord }) {
   const [open, setOpen] = useState(false);
-
-  const { data: attestation, isLoading } = useQuery({
-    queryKey: ['attestation', agentHash],
-    queryFn: async () => {
-      // Mock data for development
-      return mockAttestation;
-    },
-    enabled: open,
-  });
+  const attestation = agent.attestation;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -665,13 +666,7 @@ function AttestationDialog({ agentHash }: { agentHash: string }) {
             Cryptographic proof of build provenance
           </DialogDescription>
         </DialogHeader>
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-          </div>
-        ) : attestation ? (
+        {attestation ? (
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -738,7 +733,7 @@ function AttestationDialog({ agentHash }: { agentHash: string }) {
         ) : (
           <div className="py-8 text-center text-muted-foreground">
             <Shield className="mx-auto mb-2 h-12 w-12 opacity-50" />
-            <p>No attestation available for this agent</p>
+            <p>No attestation data available for this agent</p>
           </div>
         )}
       </DialogContent>
@@ -813,9 +808,11 @@ function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
             <div>
               <Label className="text-muted-foreground">Registered</Label>
               <p className="font-medium">
-                {new Date(
-                  parseInt(agent.registeredAt) * 1000
-                ).toLocaleDateString()}
+                {agent.registeredAt
+                  ? new Date(
+                      parseInt(agent.registeredAt) * 1000
+                    ).toLocaleDateString()
+                  : '-'}
               </p>
             </div>
             <div>
@@ -827,11 +824,11 @@ function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
           <div>
             <Label className="text-muted-foreground">Capabilities</Label>
             <div className="mt-2 flex flex-wrap gap-2">
-              {agent.capabilities.map((cap) => (
+              {agent.capabilities?.map((cap) => (
                 <Badge key={cap} variant="secondary">
                   {cap.replace('CAP_', '').toLowerCase().replace(/_/g, ' ')}
                 </Badge>
-              ))}
+              )) || <span className="text-muted-foreground">None</span>}
             </div>
           </div>
         </div>
@@ -840,53 +837,66 @@ function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
   );
 }
 
+// Fetch agents from API
+async function fetchAgents(): Promise<AgentsResponse> {
+  console.log('[AdminAgents] Fetching agents from /api/admin/agents');
+  const response = await fetch('/api/admin/agents');
+  const data = await response.json();
+  console.log('[AdminAgents] Response:', response.status, data);
+
+  if (!response.ok) {
+    throw new Error(
+      data.error ||
+        `Failed to fetch agents: ${response.status} ${response.statusText}`
+    );
+  }
+
+  return {
+    agents: data.agents || [],
+    totalCount: data.totalCount || data.agents?.length || 0,
+    stats: data.stats,
+  };
+}
+
 export default function AdminAgentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  // Mock query for development - replace with actual API
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin-agents', searchQuery, statusFilter, typeFilter],
-    queryFn: async () => {
-      // Simulate API delay
-      await new Promise((r) => setTimeout(r, 500));
-
-      let filtered = [...mockAgents];
-
-      if (searchQuery) {
-        filtered = filtered.filter((a) =>
-          a.agentHash.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-
-      if (statusFilter !== 'all') {
-        filtered = filtered.filter((a) => a.status === statusFilter);
-      }
-
-      if (typeFilter !== 'all') {
-        filtered = filtered.filter((a) => a.agentType === typeFilter);
-      }
-
-      return {
-        agents: filtered,
-        totalCount: filtered.length,
-      };
-    },
+  const { data, isLoading, error, refetch } = useQuery<AgentsResponse, Error>({
+    queryKey: ['admin-agents'],
+    queryFn: fetchAgents,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
-  const agents = data?.agents || [];
+  // Filter agents client-side
+  const filteredAgents = (data?.agents || []).filter((agent) => {
+    if (
+      searchQuery &&
+      !agent.agentHash?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
+      return false;
+    }
+    if (statusFilter !== 'all' && agent.status !== statusFilter) {
+      return false;
+    }
+    if (typeFilter !== 'all' && agent.agentType !== typeFilter) {
+      return false;
+    }
+    return true;
+  });
 
-  // Stats
-  const stats = {
-    total: mockAgents.length,
-    registered: mockAgents.filter((a) => a.status === 'AGENT_STATUS_REGISTERED')
+  // Calculate stats from real data
+  const allAgents = data?.agents || [];
+  const stats = data?.stats || {
+    registered: allAgents.filter((a) => a.status === 'AGENT_STATUS_REGISTERED')
       .length,
-    deprecated: mockAgents.filter((a) => a.status === 'AGENT_STATUS_DEPRECATED')
+    deprecated: allAgents.filter((a) => a.status === 'AGENT_STATUS_DEPRECATED')
       .length,
-    revoked: mockAgents.filter((a) => a.status === 'AGENT_STATUS_REVOKED')
+    revoked: allAgents.filter((a) => a.status === 'AGENT_STATUS_REVOKED')
       .length,
-    attested: mockAgents.filter((a) => a.hasAttestation).length,
+    attested: allAgents.filter((a) => a.hasAttestation).length,
   };
 
   return (
@@ -905,6 +915,9 @@ export default function AdminAgentsPage() {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && <ErrorBanner error={error.message} onRetry={() => refetch()} />}
+
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
@@ -912,7 +925,9 @@ export default function AdminAgentsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Agents</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? '-' : allAgents.length}
+                </p>
               </div>
               <Bot className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -924,7 +939,7 @@ export default function AdminAgentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Registered</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {stats.registered}
+                  {isLoading ? '-' : stats.registered}
                 </p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-600" />
@@ -937,7 +952,7 @@ export default function AdminAgentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Deprecated</p>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {stats.deprecated}
+                  {isLoading ? '-' : stats.deprecated}
                 </p>
               </div>
               <AlertTriangle className="h-8 w-8 text-yellow-600" />
@@ -950,7 +965,7 @@ export default function AdminAgentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Revoked</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {stats.revoked}
+                  {isLoading ? '-' : stats.revoked}
                 </p>
               </div>
               <XCircle className="h-8 w-8 text-red-600" />
@@ -965,7 +980,7 @@ export default function AdminAgentsPage() {
                   With Attestation
                 </p>
                 <p className="text-2xl font-bold text-emerald-600">
-                  {stats.attested}
+                  {isLoading ? '-' : stats.attested}
                 </p>
               </div>
               <Shield className="h-8 w-8 text-emerald-600" />
@@ -1029,7 +1044,8 @@ export default function AdminAgentsPage() {
         <CardHeader>
           <CardTitle>Registered Agents</CardTitle>
           <CardDescription>
-            {agents.length} agent{agents.length !== 1 ? 's' : ''} found
+            {filteredAgents.length} agent
+            {filteredAgents.length !== 1 ? 's' : ''} found
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1045,10 +1061,15 @@ export default function AdminAgentsPage() {
                 </div>
               ))}
             </div>
-          ) : agents.length === 0 ? (
+          ) : filteredAgents.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Bot className="mx-auto mb-4 h-12 w-12 opacity-50" />
-              <p>No agents found matching your criteria</p>
+              <p>{error ? 'Failed to load agents' : 'No agents found'}</p>
+              {!error && allAgents.length === 0 && (
+                <p className="mt-2 text-sm">
+                  Register your first agent to get started
+                </p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1065,7 +1086,7 @@ export default function AdminAgentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {agents.map((agent) => (
+                  {filteredAgents.map((agent) => (
                     <tr
                       key={agent.agentHash}
                       className="border-b last:border-0"
@@ -1101,13 +1122,15 @@ export default function AdminAgentsPage() {
                         <StatusBadge status={agent.status} />
                       </td>
                       <td className="py-4 text-muted-foreground">
-                        {new Date(
-                          parseInt(agent.registeredAt) * 1000
-                        ).toLocaleDateString()}
+                        {agent.registeredAt
+                          ? new Date(
+                              parseInt(agent.registeredAt) * 1000
+                            ).toLocaleDateString()
+                          : '-'}
                       </td>
                       <td className="py-4">
                         {agent.hasAttestation ? (
-                          <AttestationDialog agentHash={agent.agentHash} />
+                          <AttestationDialog agent={agent} />
                         ) : (
                           <span className="text-sm text-muted-foreground">
                             -

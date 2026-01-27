@@ -44,9 +44,7 @@ import {
   XCircle,
   Mail,
   Calendar,
-  Activity,
-  Shield,
-  Key,
+  AlertOctagon,
 } from 'lucide-react';
 
 interface PartnerRecord {
@@ -102,6 +100,75 @@ const LICENSE_TYPES: Record<string, string> = {
   LICENSE_PROFESSIONAL: 'Professional',
   LICENSE_ENTERPRISE: 'Enterprise',
 };
+
+// Error Display Component
+function ErrorBanner({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <Card className="border-red-300 bg-red-50">
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-4">
+          <AlertOctagon className="h-6 w-6 flex-shrink-0 text-red-600" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-800">API Error</h3>
+            <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-red-700">
+              {error}
+            </p>
+            <p className="mt-2 text-xs text-red-600">
+              Check browser console and server logs for details.
+            </p>
+          </div>
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="border-red-300"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// API fetch function
+async function fetchExpiringPartners(): Promise<{ partners: PartnerRecord[] }> {
+  console.log('[Partners] Fetching expiring licenses from /api/admin/partners');
+  const response = await fetch('/api/admin/partners?within_days=365');
+  const data = await response.json();
+  console.log('[Partners] Response:', response.status, data);
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || `Failed to fetch partners: ${response.status}`
+    );
+  }
+
+  // Map backend response to our interface
+  const partners: PartnerRecord[] = (data.partners || []).map((p: any) => ({
+    partnerId: p.partnerId || p.id || '',
+    orgId: p.orgId || '',
+    organizationName: p.organizationName || p.name || p.orgId || 'Unknown',
+    licenseType: p.licenseType || 'LICENSE_BASIC',
+    status: p.status || 'PARTNER_STATUS_ACTIVE',
+    expiresAt: p.expiresAt || p.licenseExpiresAt || '0',
+    grantedCapabilities: p.grantedCapabilities || p.capabilities || [],
+    deniedCapabilities: p.deniedCapabilities || [],
+    createdAt: p.createdAt || '0',
+    lastActivityAt: p.lastActivityAt,
+  }));
+
+  return { partners };
+}
 
 function getDaysRemaining(expiresAt: string): number {
   const expires = parseInt(expiresAt) * 1000;
@@ -160,70 +227,17 @@ export default function AdminPartnersPage() {
     null
   );
 
-  // Fetch partners
+  // Fetch partners from real API
   const {
     data: partnersData,
     isLoading,
+    error,
     refetch,
-  } = useQuery({
+  } = useQuery<{ partners: PartnerRecord[] }, Error>({
     queryKey: ['admin-partners'],
-    queryFn: async () => {
-      // Mock data - replace with actual API call
-      const partners: PartnerRecord[] = [
-        {
-          partnerId: 'ptr_001',
-          orgId: 'org_acme',
-          organizationName: 'Acme Corporation',
-          licenseType: 'LICENSE_ENTERPRISE',
-          status: 'PARTNER_STATUS_ACTIVE',
-          expiresAt: String(Math.floor(Date.now() / 1000) + 86400 * 180),
-          grantedCapabilities: [
-            'CAP_AGENT_MANAGEMENT',
-            'CAP_AUDIT_ACCESS',
-            'CAP_USER_MANAGEMENT',
-          ],
-          deniedCapabilities: [],
-          createdAt: String(Math.floor(Date.now() / 1000) - 86400 * 365),
-          lastActivityAt: String(Math.floor(Date.now() / 1000) - 3600),
-        },
-        {
-          partnerId: 'ptr_002',
-          orgId: 'org_beta',
-          organizationName: 'Beta Industries',
-          licenseType: 'LICENSE_PROFESSIONAL',
-          status: 'PARTNER_STATUS_ACTIVE',
-          expiresAt: String(Math.floor(Date.now() / 1000) + 86400 * 15),
-          grantedCapabilities: ['CAP_AGENT_MANAGEMENT', 'CAP_AUDIT_ACCESS'],
-          deniedCapabilities: [],
-          createdAt: String(Math.floor(Date.now() / 1000) - 86400 * 200),
-          lastActivityAt: String(Math.floor(Date.now() / 1000) - 86400),
-        },
-        {
-          partnerId: 'ptr_003',
-          orgId: 'org_gamma',
-          organizationName: 'Gamma Solutions',
-          licenseType: 'LICENSE_TRIAL',
-          status: 'PARTNER_STATUS_ACTIVE',
-          expiresAt: String(Math.floor(Date.now() / 1000) + 86400 * 5),
-          grantedCapabilities: ['CAP_AGENT_MANAGEMENT'],
-          deniedCapabilities: ['CAP_USER_MANAGEMENT'],
-          createdAt: String(Math.floor(Date.now() / 1000) - 86400 * 25),
-          lastActivityAt: String(Math.floor(Date.now() / 1000) - 86400 * 3),
-        },
-        {
-          partnerId: 'ptr_004',
-          orgId: 'org_delta',
-          organizationName: 'Delta Technologies',
-          licenseType: 'LICENSE_BASIC',
-          status: 'PARTNER_STATUS_SUSPENDED',
-          expiresAt: String(Math.floor(Date.now() / 1000) - 86400 * 10),
-          grantedCapabilities: ['CAP_AGENT_MANAGEMENT'],
-          deniedCapabilities: [],
-          createdAt: String(Math.floor(Date.now() / 1000) - 86400 * 100),
-        },
-      ];
-      return { partners };
-    },
+    queryFn: fetchExpiringPartners,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
   const partners = partnersData?.partners || [];
@@ -269,6 +283,9 @@ export default function AdminPartnersPage() {
           Refresh
         </Button>
       </div>
+
+      {/* Error Banner */}
+      {error && <ErrorBanner error={error.message} onRetry={() => refetch()} />}
 
       {/* License Expiration Dashboard */}
       <div className="grid gap-4 md:grid-cols-4">
