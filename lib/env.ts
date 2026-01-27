@@ -48,13 +48,13 @@ export const AUTH_CONFIG: Record<AppEnv, AuthConfig> = {
   stage: {
     requireOAuth: true,
     allowTestUsers: false,
-    allowedDomains: ['*'], // Relaxed for staging
+    allowedDomains: ['ciris.ai'], // Restrict to CIRIS domain
     sessionMaxAge: 24 * 60 * 60, // 24 hours
   },
   prod: {
     requireOAuth: true,
     allowTestUsers: false,
-    allowedDomains: [], // Must be configured per-deployment
+    allowedDomains: ['ciris.ai'], // Restrict to CIRIS domain
     sessionMaxAge: 8 * 60 * 60, // 8 hours
   },
 };

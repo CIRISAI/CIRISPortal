@@ -1,12 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Enable standalone output for Docker deployment
+  output: 'standalone',
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
     },
   },
-  // Cloudflare Pages configuration
   images: {
     unoptimized: true,
   },
