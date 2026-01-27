@@ -1,0 +1,1169 @@
+'use client';
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Bot,
+  Plus,
+  MoreVertical,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Shield,
+  Search,
+  Upload,
+  Eye,
+  Copy,
+  Loader2,
+  RefreshCw,
+  ExternalLink,
+} from 'lucide-react';
+import { toast } from '@/lib/hooks/use-toast';
+
+// Types
+interface AgentRecord {
+  agentHash: string;
+  agentType: string;
+  version: {
+    major: number;
+    minor: number;
+    patch: number;
+  };
+  status: string;
+  capabilities: string[];
+  maxAutonomyTier: string;
+  registeredAt: string;
+  hasAttestation: boolean;
+}
+
+interface BuildAttestation {
+  buildType: string;
+  sourceRepo: string;
+  commitHash: string;
+  builderId: string;
+  slsaLevel: number;
+  signature: string;
+  createdAt: string;
+}
+
+// Agent types and status mappings
+const AGENT_TYPES: Record<string, string> = {
+  AGENT_TYPE_CIRIS_CORE: 'CIRIS Core',
+  AGENT_TYPE_CIRIS_LITE: 'CIRIS Lite',
+  AGENT_TYPE_PARTNER: 'Partner Agent',
+  AGENT_TYPE_CUSTOM: 'Custom Agent',
+};
+
+const AGENT_TYPES_OPTIONS = [
+  { value: 'AGENT_TYPE_CIRIS_CORE', label: 'CIRIS Core' },
+  { value: 'AGENT_TYPE_CIRIS_LITE', label: 'CIRIS Lite' },
+  { value: 'AGENT_TYPE_PARTNER', label: 'Partner Agent' },
+  { value: 'AGENT_TYPE_CUSTOM', label: 'Custom Agent' },
+];
+
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string; bgColor: string }
+> = {
+  AGENT_STATUS_REGISTERED: {
+    label: 'Registered',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+  },
+  AGENT_STATUS_DEPRECATED: {
+    label: 'Deprecated',
+    color: 'text-yellow-700',
+    bgColor: 'bg-yellow-100',
+  },
+  AGENT_STATUS_REVOKED: {
+    label: 'Revoked',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+  },
+};
+
+const AUTONOMY_TIERS = [
+  { value: 'AUTONOMY_TIER_A0', label: 'A0 - Human-in-the-loop' },
+  { value: 'AUTONOMY_TIER_A1', label: 'A1 - Supervised Autonomy' },
+  { value: 'AUTONOMY_TIER_A2', label: 'A2 - Conditional Autonomy' },
+  { value: 'AUTONOMY_TIER_A3', label: 'A3 - High Autonomy' },
+  { value: 'AUTONOMY_TIER_A4', label: 'A4 - Full Autonomy' },
+];
+
+const CAPABILITIES = [
+  'CAP_TEXT_GENERATION',
+  'CAP_CODE_EXECUTION',
+  'CAP_FILE_SYSTEM',
+  'CAP_NETWORK_ACCESS',
+  'CAP_TOOL_USE',
+  'CAP_MEMORY_PERSISTENCE',
+  'CAP_MULTI_MODAL',
+  'CAP_REASONING',
+];
+
+// Mock data for development
+const mockAgents: AgentRecord[] = [
+  {
+    agentHash:
+      'a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd',
+    agentType: 'AGENT_TYPE_CIRIS_CORE',
+    version: { major: 2, minor: 1, patch: 0 },
+    status: 'AGENT_STATUS_REGISTERED',
+    capabilities: ['CAP_TEXT_GENERATION', 'CAP_REASONING', 'CAP_TOOL_USE'],
+    maxAutonomyTier: 'AUTONOMY_TIER_A2',
+    registeredAt: '1706140800',
+    hasAttestation: true,
+  },
+  {
+    agentHash:
+      'b2c3d4e5f67890123456789012345678901234567890123456789012345bcd1',
+    agentType: 'AGENT_TYPE_CIRIS_LITE',
+    version: { major: 1, minor: 5, patch: 2 },
+    status: 'AGENT_STATUS_REGISTERED',
+    capabilities: ['CAP_TEXT_GENERATION', 'CAP_REASONING'],
+    maxAutonomyTier: 'AUTONOMY_TIER_A1',
+    registeredAt: '1705449600',
+    hasAttestation: true,
+  },
+  {
+    agentHash: 'c3d4e5f6789012345678901234567890123456789012345678901234cde12',
+    agentType: 'AGENT_TYPE_PARTNER',
+    version: { major: 1, minor: 0, patch: 0 },
+    status: 'AGENT_STATUS_DEPRECATED',
+    capabilities: ['CAP_TEXT_GENERATION'],
+    maxAutonomyTier: 'AUTONOMY_TIER_A0',
+    registeredAt: '1704067200',
+    hasAttestation: false,
+  },
+  {
+    agentHash: 'd4e5f67890123456789012345678901234567890123456789012345def123',
+    agentType: 'AGENT_TYPE_CUSTOM',
+    version: { major: 0, minor: 9, patch: 1 },
+    status: 'AGENT_STATUS_REVOKED',
+    capabilities: ['CAP_CODE_EXECUTION', 'CAP_FILE_SYSTEM'],
+    maxAutonomyTier: 'AUTONOMY_TIER_A1',
+    registeredAt: '1703462400',
+    hasAttestation: false,
+  },
+];
+
+const mockAttestation: BuildAttestation = {
+  buildType: 'GitHub Actions',
+  sourceRepo: 'https://github.com/CIRISAI/CIRISAgent',
+  commitHash: '8f4e2a1b3c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f',
+  builderId: 'github-hosted-runner-ubuntu-22.04',
+  slsaLevel: 3,
+  signature: 'MEUCIQDx...base64signature...==',
+  createdAt: '1706140800',
+};
+
+function formatVersion(version?: {
+  major: number;
+  minor: number;
+  patch: number;
+}) {
+  if (!version) return '-';
+  return `v${version.major}.${version.minor}.${version.patch}`;
+}
+
+function truncateHash(hash: string, length = 16) {
+  if (hash.length <= length) return hash;
+  return `${hash.slice(0, length / 2)}...${hash.slice(-length / 2)}`;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const config = STATUS_CONFIG[status] || {
+    label: status.replace('AGENT_STATUS_', ''),
+    color: 'text-gray-700',
+    bgColor: 'bg-gray-100',
+  };
+
+  return (
+    <Badge className={`${config.bgColor} ${config.color}`} variant="outline">
+      {config.label}
+    </Badge>
+  );
+}
+
+// Agent Registration Dialog
+function RegisterAgentDialog() {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    agentHash: '',
+    agentType: '',
+    versionMajor: '1',
+    versionMinor: '0',
+    versionPatch: '0',
+    capabilities: [] as string[],
+    maxAutonomyTier: '',
+  });
+  const queryClient = useQueryClient();
+
+  const registerMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const response = await fetch('/api/admin/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentHash: data.agentHash,
+          agentType: data.agentType,
+          version: {
+            major: parseInt(data.versionMajor),
+            minor: parseInt(data.versionMinor),
+            patch: parseInt(data.versionPatch),
+          },
+          capabilities: data.capabilities,
+          maxAutonomyTier: data.maxAutonomyTier,
+        }),
+      });
+      if (!response.ok) throw new Error('Registration failed');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
+      toast({
+        title: 'Success',
+        description: 'Agent registered successfully',
+        variant: 'success',
+      });
+      setOpen(false);
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const resetForm = () => {
+    setFormData({
+      agentHash: '',
+      agentType: '',
+      versionMajor: '1',
+      versionMinor: '0',
+      versionPatch: '0',
+      capabilities: [],
+      maxAutonomyTier: '',
+    });
+  };
+
+  const toggleCapability = (cap: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      capabilities: prev.capabilities.includes(cap)
+        ? prev.capabilities.filter((c) => c !== cap)
+        : [...prev.capabilities, cap],
+    }));
+  };
+
+  const isValidHash = /^[a-fA-F0-9]{64}$/.test(formData.agentHash);
+  const isFormValid =
+    isValidHash &&
+    formData.agentType &&
+    formData.capabilities.length > 0 &&
+    formData.maxAutonomyTier;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Register Agent
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Register New Agent</DialogTitle>
+          <DialogDescription>
+            Add a new agent build to the registry
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="agentHash">Agent Hash (SHA-256)</Label>
+            <Input
+              id="agentHash"
+              placeholder="64-character hex hash"
+              value={formData.agentHash}
+              onChange={(e) =>
+                setFormData({ ...formData, agentHash: e.target.value })
+              }
+              className="font-mono text-sm"
+            />
+            {formData.agentHash && !isValidHash && (
+              <p className="text-xs text-red-500">
+                Must be exactly 64 hexadecimal characters
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Agent Type</Label>
+              <Select
+                value={formData.agentType}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, agentType: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENT_TYPES_OPTIONS.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Max Autonomy Tier</Label>
+              <Select
+                value={formData.maxAutonomyTier}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, maxAutonomyTier: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select tier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AUTONOMY_TIERS.map((tier) => (
+                    <SelectItem key={tier.value} value={tier.value}>
+                      {tier.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Version</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="0"
+                value={formData.versionMajor}
+                onChange={(e) =>
+                  setFormData({ ...formData, versionMajor: e.target.value })
+                }
+                className="w-20"
+              />
+              <span className="text-muted-foreground">.</span>
+              <Input
+                type="number"
+                min="0"
+                value={formData.versionMinor}
+                onChange={(e) =>
+                  setFormData({ ...formData, versionMinor: e.target.value })
+                }
+                className="w-20"
+              />
+              <span className="text-muted-foreground">.</span>
+              <Input
+                type="number"
+                min="0"
+                value={formData.versionPatch}
+                onChange={(e) =>
+                  setFormData({ ...formData, versionPatch: e.target.value })
+                }
+                className="w-20"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Capabilities</Label>
+            <div className="flex flex-wrap gap-2">
+              {CAPABILITIES.map((cap) => (
+                <Badge
+                  key={cap}
+                  variant={
+                    formData.capabilities.includes(cap) ? 'default' : 'outline'
+                  }
+                  className="cursor-pointer"
+                  onClick={() => toggleCapability(cap)}
+                >
+                  {cap.replace('CAP_', '').toLowerCase().replace(/_/g, ' ')}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => registerMutation.mutate(formData)}
+            disabled={!isFormValid || registerMutation.isPending}
+          >
+            {registerMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Registering...
+              </>
+            ) : (
+              'Register Agent'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Batch Registration Dialog
+function BatchRegisterDialog() {
+  const [open, setOpen] = useState(false);
+  const [jsonInput, setJsonInput] = useState('');
+  const [preview, setPreview] = useState<any[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setJsonInput(content);
+      parseJson(content);
+    };
+    reader.readAsText(file);
+  };
+
+  const parseJson = (content: string) => {
+    try {
+      const data = JSON.parse(content);
+      if (!Array.isArray(data.agents)) {
+        throw new Error('JSON must contain an "agents" array');
+      }
+      setPreview(data.agents);
+      setError(null);
+    } catch (err: any) {
+      setPreview(null);
+      setError(err.message);
+    }
+  };
+
+  const batchMutation = useMutation({
+    mutationFn: async (agents: any[]) => {
+      const response = await fetch('/api/admin/agents/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agents }),
+      });
+      if (!response.ok) throw new Error('Batch registration failed');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
+      toast({
+        title: 'Success',
+        description: `Registered ${data.successCount} agents`,
+        variant: 'success',
+      });
+      if (data.failureCount > 0) {
+        toast({
+          title: 'Warning',
+          description: `${data.failureCount} agents failed`,
+        });
+      }
+      setOpen(false);
+      setJsonInput('');
+      setPreview(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Upload className="mr-2 h-4 w-4" />
+          Batch Register
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[80vh] max-w-3xl overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Batch Register Agents</DialogTitle>
+          <DialogDescription>
+            Upload a JSON file to register multiple agents at once
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label>Upload JSON File</Label>
+            <Input
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              className="cursor-pointer"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Or paste JSON</Label>
+            <textarea
+              className="h-32 w-full rounded-md border p-2 font-mono text-sm"
+              placeholder='{"agents": [{"agentHash": "...", "agentType": "...", ...}]}'
+              value={jsonInput}
+              onChange={(e) => {
+                setJsonInput(e.target.value);
+                parseJson(e.target.value);
+              }}
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600">
+              <XCircle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          {preview && preview.length > 0 && (
+            <div className="space-y-2">
+              <Label>Preview ({preview.length} agents)</Label>
+              <div className="max-h-48 overflow-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="p-2 text-left">Hash</th>
+                      <th className="p-2 text-left">Type</th>
+                      <th className="p-2 text-left">Version</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.slice(0, 10).map((agent, i) => (
+                      <tr key={i} className="border-t">
+                        <td className="p-2 font-mono text-xs">
+                          {truncateHash(agent.agentHash || '')}
+                        </td>
+                        <td className="p-2">
+                          {AGENT_TYPES[agent.agentType] || agent.agentType}
+                        </td>
+                        <td className="p-2">
+                          {agent.version
+                            ? `v${agent.version.major}.${agent.version.minor}.${agent.version.patch}`
+                            : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {preview.length > 10 && (
+                  <p className="border-t p-2 text-center text-muted-foreground">
+                    ...and {preview.length - 10} more
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => preview && batchMutation.mutate(preview)}
+            disabled={
+              !preview || preview.length === 0 || batchMutation.isPending
+            }
+          >
+            {batchMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Registering...
+              </>
+            ) : (
+              `Register ${preview?.length || 0} Agents`
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Build Attestation Dialog
+function AttestationDialog({ agentHash }: { agentHash: string }) {
+  const [open, setOpen] = useState(false);
+
+  const { data: attestation, isLoading } = useQuery({
+    queryKey: ['attestation', agentHash],
+    queryFn: async () => {
+      // Mock data for development
+      return mockAttestation;
+    },
+    enabled: open,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm">
+          <Eye className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Build Attestation
+          </DialogTitle>
+          <DialogDescription>
+            Cryptographic proof of build provenance
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : attestation ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label className="text-muted-foreground">Build Type</Label>
+                <p className="font-medium">{attestation.buildType}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">SLSA Level</Label>
+                <Badge variant="outline" className="mt-1">
+                  Level {attestation.slsaLevel}
+                </Badge>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">
+                  Source Repository
+                </Label>
+                <a
+                  href={attestation.sourceRepo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-emerald-600 hover:underline"
+                >
+                  {attestation.sourceRepo.replace('https://github.com/', '')}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Builder ID</Label>
+                <p className="font-mono text-sm">{attestation.builderId}</p>
+              </div>
+            </div>
+            <div>
+              <Label className="text-muted-foreground">Commit Hash</Label>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="rounded bg-muted px-2 py-1 font-mono text-sm">
+                  {attestation.commitHash}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(attestation.commitHash);
+                    toast({
+                      title: 'Copied',
+                      description: 'Hash copied to clipboard',
+                    });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-muted-foreground">
+                Attestation Signature
+              </Label>
+              <div className="mt-1 overflow-x-auto rounded-md bg-muted p-3">
+                <code className="break-all font-mono text-xs">
+                  {attestation.signature}
+                </code>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-muted-foreground">
+            <Shield className="mx-auto mb-2 h-12 w-12 opacity-50" />
+            <p>No attestation available for this agent</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Agent Details Dialog
+function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+          <Eye className="mr-2 h-4 w-4" />
+          View Details
+        </DropdownMenuItem>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            Agent Details
+          </DialogTitle>
+          <DialogDescription>
+            {AGENT_TYPES[agent.agentType] || agent.agentType} -{' '}
+            {formatVersion(agent.version)}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <StatusBadge status={agent.status} />
+            <Badge variant="outline">
+              {agent.maxAutonomyTier?.replace('AUTONOMY_TIER_', '') ||
+                'Unknown Tier'}
+            </Badge>
+            {agent.hasAttestation && (
+              <Badge
+                className="bg-emerald-100 text-emerald-700"
+                variant="outline"
+              >
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                Attested Build
+              </Badge>
+            )}
+          </div>
+
+          <div>
+            <Label className="text-muted-foreground">Agent Hash</Label>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="flex-1 overflow-x-auto rounded bg-muted px-2 py-1 font-mono text-sm">
+                {agent.agentHash}
+              </code>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(agent.agentHash);
+                  toast({
+                    title: 'Copied',
+                    description: 'Hash copied to clipboard',
+                  });
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label className="text-muted-foreground">Registered</Label>
+              <p className="font-medium">
+                {new Date(
+                  parseInt(agent.registeredAt) * 1000
+                ).toLocaleDateString()}
+              </p>
+            </div>
+            <div>
+              <Label className="text-muted-foreground">Version</Label>
+              <p className="font-medium">{formatVersion(agent.version)}</p>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-muted-foreground">Capabilities</Label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {agent.capabilities.map((cap) => (
+                <Badge key={cap} variant="secondary">
+                  {cap.replace('CAP_', '').toLowerCase().replace(/_/g, ' ')}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function AdminAgentsPage() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+
+  // Mock query for development - replace with actual API
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-agents', searchQuery, statusFilter, typeFilter],
+    queryFn: async () => {
+      // Simulate API delay
+      await new Promise((r) => setTimeout(r, 500));
+
+      let filtered = [...mockAgents];
+
+      if (searchQuery) {
+        filtered = filtered.filter((a) =>
+          a.agentHash.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter((a) => a.status === statusFilter);
+      }
+
+      if (typeFilter !== 'all') {
+        filtered = filtered.filter((a) => a.agentType === typeFilter);
+      }
+
+      return {
+        agents: filtered,
+        totalCount: filtered.length,
+      };
+    },
+  });
+
+  const agents = data?.agents || [];
+
+  // Stats
+  const stats = {
+    total: mockAgents.length,
+    registered: mockAgents.filter((a) => a.status === 'AGENT_STATUS_REGISTERED')
+      .length,
+    deprecated: mockAgents.filter((a) => a.status === 'AGENT_STATUS_DEPRECATED')
+      .length,
+    revoked: mockAgents.filter((a) => a.status === 'AGENT_STATUS_REVOKED')
+      .length,
+    attested: mockAgents.filter((a) => a.hasAttestation).length,
+  };
+
+  return (
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Agent Registry</h1>
+          <p className="text-muted-foreground">
+            Manage registered agent builds and attestations
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <BatchRegisterDialog />
+          <RegisterAgentDialog />
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Agents</p>
+                <p className="text-2xl font-bold">{stats.total}</p>
+              </div>
+              <Bot className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Registered</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {stats.registered}
+                </p>
+              </div>
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Deprecated</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {stats.deprecated}
+                </p>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Revoked</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {stats.revoked}
+                </p>
+              </div>
+              <XCircle className="h-8 w-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  With Attestation
+                </p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {stats.attested}
+                </p>
+              </div>
+              <Shield className="h-8 w-8 text-emerald-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-[200px] flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by hash..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 font-mono"
+                />
+              </div>
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="AGENT_STATUS_REGISTERED">
+                  Registered
+                </SelectItem>
+                <SelectItem value="AGENT_STATUS_DEPRECATED">
+                  Deprecated
+                </SelectItem>
+                <SelectItem value="AGENT_STATUS_REVOKED">Revoked</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {AGENT_TYPES_OPTIONS.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="icon" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Agent List */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Registered Agents</CardTitle>
+          <CardDescription>
+            {agents.length} agent{agents.length !== 1 ? 's' : ''} found
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-4 w-1/4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : agents.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Bot className="mx-auto mb-4 h-12 w-12 opacity-50" />
+              <p>No agents found matching your criteria</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b text-left text-sm text-muted-foreground">
+                    <th className="pb-3 font-medium">Hash</th>
+                    <th className="pb-3 font-medium">Type</th>
+                    <th className="pb-3 font-medium">Version</th>
+                    <th className="pb-3 font-medium">Status</th>
+                    <th className="pb-3 font-medium">Registered</th>
+                    <th className="pb-3 font-medium">Attestation</th>
+                    <th className="sr-only pb-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agents.map((agent) => (
+                    <tr
+                      key={agent.agentHash}
+                      className="border-b last:border-0"
+                    >
+                      <td className="py-4">
+                        <div className="flex items-center gap-2">
+                          <code className="font-mono text-sm">
+                            {truncateHash(agent.agentHash)}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText(agent.agentHash);
+                              toast({
+                                title: 'Copied',
+                                description: 'Hash copied to clipboard',
+                              });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </td>
+                      <td className="py-4">
+                        {AGENT_TYPES[agent.agentType] || agent.agentType}
+                      </td>
+                      <td className="py-4 font-mono">
+                        {formatVersion(agent.version)}
+                      </td>
+                      <td className="py-4">
+                        <StatusBadge status={agent.status} />
+                      </td>
+                      <td className="py-4 text-muted-foreground">
+                        {new Date(
+                          parseInt(agent.registeredAt) * 1000
+                        ).toLocaleDateString()}
+                      </td>
+                      <td className="py-4">
+                        {agent.hasAttestation ? (
+                          <AttestationDialog agentHash={agent.agentHash} />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            -
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <AgentDetailsDialog agent={agent} />
+                            <DropdownMenuItem
+                              onClick={() => {
+                                navigator.clipboard.writeText(agent.agentHash);
+                                toast({
+                                  title: 'Copied',
+                                  description: 'Hash copied to clipboard',
+                                });
+                              }}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy Hash
+                            </DropdownMenuItem>
+                            {agent.status === 'AGENT_STATUS_REGISTERED' && (
+                              <>
+                                <DropdownMenuItem className="text-yellow-600">
+                                  <AlertTriangle className="mr-2 h-4 w-4" />
+                                  Deprecate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-red-600">
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  Revoke
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {agent.status === 'AGENT_STATUS_DEPRECATED' && (
+                              <DropdownMenuItem className="text-red-600">
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Revoke
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
