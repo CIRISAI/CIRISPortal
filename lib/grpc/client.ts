@@ -462,7 +462,13 @@ export async function registerAgent(params: {
 }): Promise<any> {
   return promisifyUnary(getAdminClient(), 'registerAgent', {
     context: buildContext(),
-    ...params,
+    agent: {
+      agentHash: params.agentHash,
+      agentType: params.agentType,
+      version: params.version,
+      capabilities: params.capabilities,
+      maxAutonomyTier: params.maxAutonomyTier,
+    },
   });
 }
 

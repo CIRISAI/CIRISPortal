@@ -1399,6 +1399,39 @@ message CleanupTestRecordsResponse {
   ResponseContext context = 50;
 }
 
+// List registered agents with filtering and pagination
+message ListRegisteredAgentsRequest {
+  // Filters
+  AgentType agent_type = 1;             // Filter by type (0 = all)
+  AgentStatus status = 2;               // Filter by status (0 = all)
+  string version_prefix = 3;            // Filter by version prefix (e.g., "2.1.")
+  string search_query = 4;              // Search in source_repo, source_commit
+  bool include_test_records = 5;        // Include test records (default: false)
+
+  // Pagination
+  int32 page_size = 10;                 // Max 100
+  string page_token = 11;
+
+  // Sorting
+  string order_by = 20;                 // "registered_at", "version", "agent_type"
+  bool descending = 21;
+
+  RequestContext context = 30;
+}
+
+message ListRegisteredAgentsResponse {
+  repeated AgentRecord agents = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+
+  // Summary stats
+  int32 active_count = 10;
+  int32 deprecated_count = 11;
+  int32 revoked_count = 12;
+
+  ResponseContext context = 50;
+}
+
 // ============================================================================
 // API MESSAGES
 // ============================================================================
@@ -1800,6 +1833,7 @@ service RegistryAdminService {
   // Agent management
   rpc RegisterAgent(RegisterAgentRequest) returns (AdminResponse);
   rpc BatchRegisterAgents(BatchRegisterAgentsRequest) returns (BatchRegisterAgentsResponse);
+  rpc ListRegisteredAgents(ListRegisteredAgentsRequest) returns (ListRegisteredAgentsResponse);
 
   // Partner management
   rpc RegisterPartner(RegisterPartnerRequest) returns (AdminResponse);
