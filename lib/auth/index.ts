@@ -4,45 +4,23 @@ import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { getAppEnv, getAuthConfig } from '../env';
 import { TEST_ORG_ID, TEST_SECONDARY_ORG_ID } from '../test-config';
+import {
+  provisionUser,
+  getFallbackUserInfo,
+  ProvisioningError,
+  type UserRole,
+  type ProvisionedUser,
+} from './user-provisioning';
 
-/**
- * CIRIS Organization ID - internal team org
- * ciris.ai domain users are auto-provisioned here as admins
- */
-const CIRIS_ORG_ID = 'ciris-internal';
-
-/**
- * Role hierarchy for CIRISPortal:
- * - admin: CIRIS internal team, full system access
- * - partner: Organization admins who manage licensees
- * - licensee: End users with read-only access to their org
- */
-export type UserRole = 'admin' | 'partner' | 'licensee';
-
-/**
- * Determine role based on email domain
- * - ciris.ai = admin (internal team)
- * - others = licensee (default, can be upgraded to partner)
- */
-function getRoleForEmail(email: string): { role: UserRole; orgId: string } {
-  const domain = email.split('@')[1]?.toLowerCase();
-
-  if (domain === 'ciris.ai') {
-    return { role: 'admin', orgId: CIRIS_ORG_ID };
-  }
-
-  // Future: look up partner/licensee status from backend
-  // For now, non-ciris.ai users default to licensee role
-  // Partners would be promoted via admin action
-  return { role: 'licensee', orgId: `org-${domain}` };
-}
+// Re-export types
+export type { UserRole, ProvisionedUser };
 
 /**
  * Test users available in devtest environment
  */
 const TEST_USERS: Record<
   string,
-  User & { password: string; orgId: string; role: string }
+  User & { password: string; orgId: string; role: UserRole }
 > = {
   'admin@qa-primary.test': {
     id: 'test-admin-1',
@@ -60,7 +38,16 @@ const TEST_USERS: Record<
     image: null,
     password: 'testpass123',
     orgId: TEST_ORG_ID,
-    role: 'user',
+    role: 'licensee',
+  },
+  'partner@qa-primary.test': {
+    id: 'test-partner-1',
+    email: 'partner@qa-primary.test',
+    name: 'QA Partner Admin',
+    image: null,
+    password: 'testpass123',
+    orgId: TEST_ORG_ID,
+    role: 'partner',
   },
   'admin@qa-secondary.test': {
     id: 'test-admin-2',
@@ -137,6 +124,40 @@ function buildProviders() {
   return providers;
 }
 
+/**
+ * Provision user and handle errors gracefully
+ */
+async function safeProvisionUser(
+  email: string,
+  name: string,
+  provider: string
+): Promise<ProvisionedUser> {
+  try {
+    return await provisionUser(email, name, provider);
+  } catch (error) {
+    if (error instanceof ProvisioningError) {
+      console.error(
+        `[Auth] Provisioning error (${error.code}): ${error.message}`
+      );
+
+      if (error.recoverable) {
+        // Use fallback for recoverable errors (registry unavailable, etc.)
+        console.warn(
+          '[Auth] Using fallback user info due to provisioning error'
+        );
+        return getFallbackUserInfo(email, name);
+      }
+
+      // Non-recoverable errors should block login
+      throw error;
+    }
+
+    // Unknown error - log and use fallback
+    console.error('[Auth] Unknown provisioning error:', error);
+    return getFallbackUserInfo(email, name);
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: buildProviders(),
   secret: process.env.NEXTAUTH_SECRET,
@@ -156,35 +177,76 @@ export const authOptions: NextAuthOptions = {
         token.name = user.name;
         token.picture = user.image;
 
-        // Add org/role info for test users
+        // Check for test users first
         const testUser = TEST_USERS[user.email ?? ''];
         if (testUser) {
+          token.userId = testUser.id;
           token.orgId = testUser.orgId;
+          token.orgName = 'Test Organization';
           token.role = testUser.role;
+          console.log(
+            `[Auth] Test user login: ${user.email} as ${testUser.role}`
+          );
         } else if (user.email) {
-          // OAuth users: determine role based on email domain
-          // ciris.ai = admin (internal team)
-          // others = user (partners)
-          const { role, orgId } = getRoleForEmail(user.email);
-          token.orgId = orgId;
-          token.role = role;
+          // OAuth users: provision via registry
+          try {
+            const provisionedUser = await safeProvisionUser(
+              user.email,
+              user.name || user.email.split('@')[0],
+              account.provider
+            );
+
+            token.userId = provisionedUser.userId;
+            token.orgId = provisionedUser.orgId;
+            token.orgName = provisionedUser.orgName;
+            token.role = provisionedUser.role;
+
+            console.log(
+              `[Auth] OAuth user login: ${user.email} as ${provisionedUser.role} in ${provisionedUser.orgId}`
+            );
+
+            if (provisionedUser.isNewUser) {
+              console.log(`[Auth] New user created: ${user.email}`);
+            }
+            if (provisionedUser.isNewOrg) {
+              console.log(`[Auth] New org created: ${provisionedUser.orgId}`);
+            }
+          } catch (error) {
+            console.error('[Auth] Failed to provision user:', error);
+            // Don't block login - use minimal fallback
+            const fallback = getFallbackUserInfo(
+              user.email,
+              user.name || user.email.split('@')[0]
+            );
+            token.userId = fallback.userId;
+            token.orgId = fallback.orgId;
+            token.orgName = fallback.orgName;
+            token.role = fallback.role;
+          }
         }
       }
       return token;
     },
+
     async session({ session, token }) {
       // Pass token data to the session
       if (session.user) {
         session.user.email = token.email as string;
         session.user.name = token.name as string;
         session.user.image = token.picture as string;
+        // Extended session properties
+        // @ts-expect-error - extending session type
+        session.user.userId = token.userId;
         // @ts-expect-error - extending session type
         session.user.orgId = token.orgId;
+        // @ts-expect-error - extending session type
+        session.user.orgName = token.orgName;
         // @ts-expect-error - extending session type
         session.user.role = token.role;
       }
       return session;
     },
+
     async signIn({ user, account }) {
       const authConfig = getAuthConfig();
 
@@ -204,6 +266,9 @@ export const authOptions: NextAuthOptions = {
         const email = user.email ?? '';
         const domain = email.split('@')[1];
         if (!authConfig.allowedDomains.includes(domain)) {
+          console.warn(
+            `[Auth] Rejected login from unauthorized domain: ${domain}`
+          );
           return false;
         }
       }
@@ -230,4 +295,30 @@ export function getTestUsers() {
   return Object.values(TEST_USERS).map(
     ({ password: _password, ...user }) => user
   );
+}
+
+/**
+ * Type-safe session accessor for server components
+ */
+export async function getTypedSession() {
+  const session = await getServerSession();
+  if (!session?.user) {
+    return null;
+  }
+
+  return {
+    user: {
+      email: session.user.email!,
+      name: session.user.name || '',
+      image: session.user.image || null,
+      // @ts-expect-error - extended session type
+      userId: session.user.userId as string,
+      // @ts-expect-error - extended session type
+      orgId: session.user.orgId as string,
+      // @ts-expect-error - extended session type
+      orgName: session.user.orgName as string,
+      // @ts-expect-error - extended session type
+      role: session.user.role as UserRole,
+    },
+  };
 }

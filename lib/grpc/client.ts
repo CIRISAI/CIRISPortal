@@ -127,6 +127,27 @@ export async function listOrganizations(params?: {
   });
 }
 
+export async function createOrganization(params: {
+  organization: {
+    orgId?: string;
+    name: string;
+    legalName?: string;
+    primaryEmail: string;
+    oauthProvider?: string;
+    oauthDomain: string;
+    active?: boolean;
+    metadata?: Record<string, string>;
+  };
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'createOrganization', {
+    context: buildContext(),
+    organization: {
+      ...params.organization,
+      active: params.organization.active ?? true,
+    },
+  });
+}
+
 // ============================================================================
 // User Methods
 // ============================================================================
