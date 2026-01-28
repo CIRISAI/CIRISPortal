@@ -205,6 +205,7 @@ async function getOrCreateOrganization(
 
     const orgName = isCirisInternal ? CIRIS_ORG.name : `${domain} Organization`;
 
+    // Atomic creation: org + initial admin in same transaction
     const createResponse = await createOrganization({
       organization: {
         orgId,
@@ -218,6 +219,12 @@ async function getOrCreateOrganization(
           createdAt: new Date().toISOString(),
         },
       },
+      initialAdmin: {
+        email: primaryEmail,
+        name: primaryEmail.split('@')[0],
+        role: 100, // ORG_ADMIN
+        active: true,
+      },
     });
 
     if (createResponse.error) {
@@ -228,7 +235,7 @@ async function getOrCreateOrganization(
       );
     }
 
-    console.log(`[Provisioning] Created org: ${orgId}`);
+    console.log(`[Provisioning] Created org: ${orgId} with initial admin`);
     return { orgId, orgName, isNew: true };
   } catch (error) {
     // If it's already a ProvisioningError, rethrow
@@ -247,6 +254,7 @@ async function getOrCreateOrganization(
           ? CIRIS_ORG.name
           : `${domain} Organization`;
 
+        // Atomic creation: org + initial admin in same transaction
         await createOrganization({
           organization: {
             orgId,
@@ -256,8 +264,15 @@ async function getOrCreateOrganization(
             oauthDomain: domain,
             active: true,
           },
+          initialAdmin: {
+            email: primaryEmail,
+            name: primaryEmail.split('@')[0],
+            role: 100, // ORG_ADMIN
+            active: true,
+          },
         });
 
+        console.log(`[Provisioning] Created org: ${orgId} with initial admin`);
         return { orgId, orgName, isNew: true };
       } catch (createError) {
         console.error('[Provisioning] Failed to create org:', createError);

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  listOrganizations,
-  createOrganization,
-  createOrgUser,
-} from '@/lib/grpc/client';
+import { listOrganizations, createOrganization } from '@/lib/grpc/client';
+
+/**
+ * CIRIS Internal Organization - must match user-provisioning.ts
+ */
+const CIRIS_ORG = {
+  id: 'ciris-internal',
+  name: 'CIRIS',
+  domain: 'ciris.ai',
+};
 
 /**
  * GET /api/registry/organizations
@@ -54,10 +59,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate org ID from domain if provided, otherwise from name
-    const orgId = oauthDomain
-      ? `org-${oauthDomain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
-      : `org-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
+    // Use canonical CIRIS org ID for ciris.ai domain
+    const isCirisInternal = oauthDomain?.toLowerCase() === CIRIS_ORG.domain;
+    const orgId = isCirisInternal
+      ? CIRIS_ORG.id
+      : oauthDomain
+        ? `org-${oauthDomain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+        : `org-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
 
+    // Atomic creation: org + initial admin in same transaction
+    // Role 100 = ORG_ADMIN in the proto enum
     const response = await createOrganization({
       organization: {
         orgId,
@@ -72,6 +83,12 @@ export async function POST(request: NextRequest) {
           createdAt: new Date().toISOString(),
         },
       },
+      initialAdmin: {
+        email: primaryEmail,
+        name: primaryEmail.split('@')[0],
+        role: 100, // ORG_ADMIN
+        active: true,
+      },
     });
 
     if (response.error) {
@@ -81,24 +98,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Also create the primary contact as an admin user in the org
-    try {
-      await createOrgUser({
-        user: {
-          orgId,
-          email: primaryEmail,
-          displayName: primaryEmail.split('@')[0],
-          role: 'ORG_ADMIN',
-        },
-      });
-      console.log(`[API] Created admin user ${primaryEmail} in org ${orgId}`);
-    } catch (userError) {
-      // Log but don't fail - org was created successfully
-      console.warn(
-        `[API] Failed to create admin user for org ${orgId}:`,
-        userError
-      );
-    }
+    console.log(
+      `[API] Created org ${orgId} with admin user ${primaryEmail} atomically`
+    );
 
     return NextResponse.json({
       orgId,
@@ -107,6 +109,7 @@ export async function POST(request: NextRequest) {
       oauthDomain: oauthDomain || null,
       active: true,
       createdAt: new Date().toISOString(),
+      adminUserId: response.adminUserId,
     });
   } catch (error) {
     const err = error as { message?: string; code?: number };

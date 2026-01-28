@@ -134,9 +134,15 @@ export async function createOrganization(params: {
     legalName?: string;
     primaryEmail: string;
     oauthProvider?: string;
-    oauthDomain: string;
+    oauthDomain?: string;
     active?: boolean;
     metadata?: Record<string, string>;
+  };
+  initialAdmin?: {
+    email: string;
+    name?: string;
+    role?: number;
+    active?: boolean;
   };
 }): Promise<any> {
   return promisifyUnary(getPortalClient(), 'createOrganization', {
@@ -145,6 +151,8 @@ export async function createOrganization(params: {
       ...params.organization,
       active: params.organization.active ?? true,
     },
+    // Atomic creation: include initial admin in same transaction
+    initialAdmin: params.initialAdmin,
   });
 }
 
