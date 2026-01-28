@@ -235,8 +235,13 @@ async function getOrCreateOrganization(
       );
     }
 
-    console.log(`[Provisioning] Created org: ${orgId} with initial admin`);
-    return { orgId, orgName, isNew: true };
+    // Use the actual org ID returned by the registry (UUID), not our slug
+    const actualOrgId =
+      createResponse.orgId || createResponse.organization?.orgId || orgId;
+    console.log(
+      `[Provisioning] Created org: ${actualOrgId} with initial admin`
+    );
+    return { orgId: actualOrgId, orgName, isNew: true };
   } catch (error) {
     // If it's already a ProvisioningError, rethrow
     if (error instanceof ProvisioningError) {
@@ -255,7 +260,7 @@ async function getOrCreateOrganization(
           : `${domain} Organization`;
 
         // Atomic creation: org + initial admin in same transaction
-        await createOrganization({
+        const fallbackResponse = await createOrganization({
           organization: {
             orgId,
             name: orgName,
@@ -272,8 +277,15 @@ async function getOrCreateOrganization(
           },
         });
 
-        console.log(`[Provisioning] Created org: ${orgId} with initial admin`);
-        return { orgId, orgName, isNew: true };
+        // Use the actual org ID returned by the registry (UUID), not our slug
+        const actualOrgId =
+          fallbackResponse.orgId ||
+          fallbackResponse.organization?.orgId ||
+          orgId;
+        console.log(
+          `[Provisioning] Created org: ${actualOrgId} with initial admin`
+        );
+        return { orgId: actualOrgId, orgName, isNew: true };
       } catch (createError) {
         console.error('[Provisioning] Failed to create org:', createError);
         throw new ProvisioningError(
