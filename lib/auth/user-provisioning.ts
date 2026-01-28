@@ -422,22 +422,47 @@ export async function provisionUser(
 
   const isCirisInternal = domain === CIRIS_ORG.domain;
 
-  // Determine default role for new users
-  // CIRIS internal users get admin, everyone else gets licensee
-  const defaultRole: UserRole = isCirisInternal ? 'admin' : 'licensee';
-
   console.log(
     `[Provisioning] Starting for ${email} (domain: ${domain}, provider: ${oauthProvider})`
   );
 
-  // Get or create organization
-  const {
-    orgId,
-    orgName,
-    isNew: isNewOrg,
-  } = await getOrCreateOrganization(domain, email);
+  // First, check if user already exists in some org (for pre-added users)
+  const existingUser = await checkUserExists(email);
 
-  // Get or create user
+  let orgId: string;
+  let orgName: string;
+  let isNewOrg = false;
+
+  if (existingUser.exists && existingUser.orgId) {
+    // User was pre-added to an org - use that org
+    orgId = existingUser.orgId;
+    try {
+      const orgResponse = await getOrganization(orgId);
+      orgName = orgResponse.organization?.name || orgId;
+    } catch {
+      orgName = orgId;
+    }
+    console.log(`[Provisioning] Using pre-existing org ${orgId} for ${email}`);
+  } else if (isCirisInternal) {
+    // CIRIS internal users - auto-create org if needed
+    const orgResult = await getOrCreateOrganization(domain, email);
+    orgId = orgResult.orgId;
+    orgName = orgResult.orgName;
+    isNewOrg = orgResult.isNew;
+  } else {
+    // Non-CIRIS user not found in any org - shouldn't happen if auth check passed
+    throw new ProvisioningError(
+      `User ${email} not found in any organization`,
+      'USER_NOT_FOUND',
+      false
+    );
+  }
+
+  // Determine default role for new users
+  // CIRIS internal users get admin, everyone else gets licensee
+  const defaultRole: UserRole = isCirisInternal ? 'admin' : 'licensee';
+
+  // Get or create user in the org
   const {
     userId,
     role,
