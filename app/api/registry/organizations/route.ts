@@ -98,12 +98,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use the actual org ID returned by the registry (UUID), not our slug
+    const actualOrgId = response.orgId || response.organization?.orgId || orgId;
+
     console.log(
-      `[API] Created org ${orgId} with admin user ${primaryEmail} atomically`
+      `[API] Created org ${actualOrgId} with admin user ${primaryEmail} atomically`
     );
 
     return NextResponse.json({
-      orgId,
+      orgId: actualOrgId,
       name,
       primaryEmail,
       oauthDomain: oauthDomain || null,

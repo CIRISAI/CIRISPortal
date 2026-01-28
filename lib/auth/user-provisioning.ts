@@ -312,7 +312,8 @@ async function getOrCreateUser(
   orgId: string,
   email: string,
   name: string,
-  defaultRole: UserRole
+  defaultRole: UserRole,
+  isCirisInternal: boolean
 ): Promise<{
   userId: string;
   role: UserRole;
@@ -323,7 +324,6 @@ async function getOrCreateUser(
     const response = await getOrgUserByEmail({ orgId, email });
 
     if (response.user) {
-      const isCirisInternal = orgId === CIRIS_ORG.id;
       const role = orgRoleToUserRole(
         response.user.role || OrgRole.VIEWER,
         isCirisInternal
@@ -499,7 +499,7 @@ export async function provisionUser(
     userId,
     role,
     isNew: isNewUser,
-  } = await getOrCreateUser(orgId, email, name, defaultRole);
+  } = await getOrCreateUser(orgId, email, name, defaultRole, isCirisInternal);
 
   const result: ProvisionedUser = {
     userId,
