@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Shield, Users, Search, Upload, RefreshCw } from 'lucide-react';
-import { TEST_ORG_ID } from '@/lib/test-config';
+import { useSession } from 'next-auth/react';
 
 interface OrgUser {
   userId: string;
@@ -100,6 +100,9 @@ const formatDate = (timestamp: string) => {
 };
 
 export default function UsersPage() {
+  const { data: session } = useSession();
+  const orgId = (session?.user as { orgId?: string })?.orgId;
+
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -116,23 +119,26 @@ export default function UsersPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['users', TEST_ORG_ID],
+    queryKey: ['users', orgId],
     queryFn: async () => {
-      const response = await fetch(`/api/registry/users?org_id=${TEST_ORG_ID}`);
+      if (!orgId) throw new Error('No organization');
+      const response = await fetch(`/api/registry/users?org_id=${orgId}`);
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },
+    enabled: !!orgId,
   });
 
   // Create user mutation
   const createUserMutation = useMutation({
     mutationFn: async (userData: typeof newUser) => {
+      if (!orgId) throw new Error('No organization');
       const response = await fetch('/api/registry/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create',
-          org_id: TEST_ORG_ID,
+          org_id: orgId,
           ...userData,
         }),
       });
@@ -156,12 +162,13 @@ export default function UsersPage() {
       role?: string;
       active?: boolean;
     }) => {
+      if (!orgId) throw new Error('No organization');
       const response = await fetch('/api/registry/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'update',
-          org_id: TEST_ORG_ID,
+          org_id: orgId,
           user_id: params.userId,
           role: params.role,
           active: params.active,
@@ -250,21 +257,19 @@ export default function UsersPage() {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
                       {ROLES.map((role) => (
                         <SelectItem key={role.value} value={role.value}>
-                          <div>
-                            <div className="font-medium">{role.label}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {role.description}
-                            </div>
-                          </div>
+                          {role.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {ROLES.find((r) => r.value === newUser.role)?.description}
+                  </p>
                 </div>
               </div>
               <DialogFooter>

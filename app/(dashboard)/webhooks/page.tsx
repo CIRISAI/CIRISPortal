@@ -51,7 +51,7 @@ import {
   ExternalLink,
   AlertOctagon,
 } from 'lucide-react';
-import { TEST_ORG_ID } from '@/lib/test-config';
+import { useSession } from 'next-auth/react';
 import { toast } from '@/lib/hooks/use-toast';
 
 interface WebhookConfig {
@@ -279,6 +279,9 @@ function SecretDisplay({ secret }: { secret: string }) {
 }
 
 export default function WebhooksPage() {
+  const { data: session } = useSession();
+  const orgId = (session?.user as { orgId?: string })?.orgId;
+
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedWebhook, setSelectedWebhook] = useState<WebhookConfig | null>(
@@ -297,22 +300,24 @@ export default function WebhooksPage() {
     error,
     refetch,
   } = useQuery<WebhookConfig[], Error>({
-    queryKey: ['webhooks', TEST_ORG_ID],
-    queryFn: () => fetchWebhooks(TEST_ORG_ID),
+    queryKey: ['webhooks', orgId],
+    queryFn: () => fetchWebhooks(orgId || ''),
     retry: 1,
     refetchOnWindowFocus: false,
+    enabled: !!orgId,
   });
 
   // Create webhook mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof newWebhook) => {
+      if (!orgId) throw new Error('No organization');
       console.log('[Webhooks] Creating webhook:', data);
       const response = await fetch('/api/webhooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'CREATE',
-          orgId: TEST_ORG_ID,
+          orgId,
           url: data.url,
           events: data.events,
         }),
@@ -352,13 +357,14 @@ export default function WebhooksPage() {
   // Delete webhook mutation
   const deleteMutation = useMutation({
     mutationFn: async (webhookId: string) => {
+      if (!orgId) throw new Error('No organization');
       console.log('[Webhooks] Deleting webhook:', webhookId);
       const response = await fetch('/api/webhooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'DELETE',
-          orgId: TEST_ORG_ID,
+          orgId,
           webhookId,
         }),
       });

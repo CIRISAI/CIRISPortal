@@ -30,10 +30,7 @@ import {
   PartnerStatus,
   AuditActionType,
 } from '@/lib/registry-sdk';
-import { DEMO_ORG_ID } from '@/lib/test-config';
-
-// Partner ID - in production this would come from session
-const DEMO_PARTNER_ID = DEMO_ORG_ID;
+import { useSession } from 'next-auth/react';
 
 /**
  * Compute health status from various data points
@@ -178,8 +175,8 @@ function StatusIndicator({
 /**
  * License Status Card
  */
-function LicenseStatusCard() {
-  const { data: partner, isLoading, error } = usePartner(DEMO_PARTNER_ID);
+function LicenseStatusCard({ orgId }: { orgId?: string }) {
+  const { data: partner, isLoading, error } = usePartner(orgId || '');
 
   if (isLoading) {
     return (
@@ -254,8 +251,8 @@ function LicenseStatusCard() {
 /**
  * Key Health Card
  */
-function KeyHealthCard() {
-  const { data: keys, isLoading, error } = useOrgKeys({ orgId: DEMO_ORG_ID });
+function KeyHealthCard({ orgId }: { orgId?: string }) {
+  const { data: keys, isLoading, error } = useOrgKeys({ orgId: orgId || '' });
 
   if (isLoading) {
     return (
@@ -435,12 +432,8 @@ function RegistryHealthCard() {
 /**
  * Activity Summary Card
  */
-function ActivitySummaryCard() {
-  const {
-    data: activity,
-    isLoading,
-    error,
-  } = usePartnerActivity(DEMO_PARTNER_ID);
+function ActivitySummaryCard({ orgId }: { orgId?: string }) {
+  const { data: activity, isLoading, error } = usePartnerActivity(orgId || '');
 
   if (isLoading) {
     return (
@@ -546,14 +539,14 @@ function ExpirationAlertBanner() {
 /**
  * Recent Activity List
  */
-function RecentActivityList() {
+function RecentActivityList({ orgId }: { orgId?: string }) {
   const {
     data: auditLog,
     isLoading,
     error,
   } = useAuditLog({
     pageSize: 10,
-    orgId: DEMO_ORG_ID,
+    orgId: orgId || '',
   });
 
   if (isLoading) {
@@ -684,6 +677,9 @@ function QuickLinksCard() {
  * Main Dashboard Page
  */
 export default function DashboardPage() {
+  const { data: session } = useSession();
+  const orgId = (session?.user as { orgId?: string })?.orgId;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -697,15 +693,15 @@ export default function DashboardPage() {
 
       {/* Status Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <LicenseStatusCard />
-        <KeyHealthCard />
+        <LicenseStatusCard orgId={orgId} />
+        <KeyHealthCard orgId={orgId} />
         <RegistryHealthCard />
-        <ActivitySummaryCard />
+        <ActivitySummaryCard orgId={orgId} />
       </div>
 
       {/* Recent Activity and Quick Links */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <RecentActivityList />
+        <RecentActivityList orgId={orgId} />
         <QuickLinksCard />
       </div>
     </div>

@@ -53,7 +53,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 
-import { DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/test-config';
+import { useSession } from 'next-auth/react';
 
 /**
  * Status badge configuration
@@ -1026,6 +1026,13 @@ function RotateKeyDialog({
  * Main Keys Page
  */
 export default function KeysPage() {
+  const { data: session } = useSession();
+  const orgId = (session?.user as { orgId?: string })?.orgId;
+  const userId =
+    (session?.user as { userId?: string })?.userId ||
+    session?.user?.email ||
+    '';
+
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
   const [rotateResult, setRotateResult] = useState<RotateKeyResponse | null>(
@@ -1038,7 +1045,7 @@ export default function KeysPage() {
     isLoading,
     error,
     refetch,
-  } = useOrgKeys({ orgId: DEMO_ORG_ID, includeRevoked: true });
+  } = useOrgKeys({ orgId: orgId || '', includeRevoked: true });
 
   // Mutations
   const generateMutation = useGenerateKeyPair({
@@ -1068,32 +1075,35 @@ export default function KeysPage() {
   });
 
   const handleGenerateKey = (activateImmediately: boolean) => {
+    if (!orgId) return;
     generateMutation.mutate({
-      orgId: DEMO_ORG_ID,
-      requesterUserId: DEMO_USER_ID,
+      orgId,
+      requesterUserId: userId,
       activateImmediately,
     });
   };
 
   const handleActivateKey = (keyId: string) => {
+    if (!orgId) return;
     activateMutation.mutate({
-      orgId: DEMO_ORG_ID,
+      orgId,
       keyId,
-      requesterUserId: DEMO_USER_ID,
+      requesterUserId: userId,
     });
   };
 
   const handleRevokeKey = (keyId: string) => {
+    if (!orgId) return;
     if (
       confirm(
         'Are you sure you want to revoke this key? This action cannot be undone.'
       )
     ) {
       revokeMutation.mutate({
-        orgId: DEMO_ORG_ID,
+        orgId,
         keyId,
         reason: 'Manual revocation',
-        requesterUserId: DEMO_USER_ID,
+        requesterUserId: userId,
       });
     }
   };
@@ -1103,9 +1113,10 @@ export default function KeysPage() {
     gracePeriodHours?: number,
     reason?: string
   ) => {
+    if (!orgId) return;
     rotateMutation.mutate({
-      orgId: DEMO_ORG_ID,
-      requesterUserId: DEMO_USER_ID,
+      orgId,
+      requesterUserId: userId,
       mode,
       gracePeriodHours,
       reason,

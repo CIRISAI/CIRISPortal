@@ -38,7 +38,7 @@ import {
   ScrollText,
   Loader2,
 } from 'lucide-react';
-import { TEST_ORG_ID } from '@/lib/test-config';
+import { useSession } from 'next-auth/react';
 
 const FRAMEWORKS = [
   {
@@ -120,6 +120,9 @@ const ComplianceStatus = ({
 );
 
 export default function CompliancePage() {
+  const { data: session } = useSession();
+  const orgId = (session?.user as { orgId?: string })?.orgId;
+
   const [framework, setFramework] = useState('SOC2');
   const [sections, setSections] = useState<string[]>([
     'key_management',
@@ -130,11 +133,12 @@ export default function CompliancePage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      if (!orgId) throw new Error('No organization');
       const response = await fetch('/api/registry/compliance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          org_id: TEST_ORG_ID,
+          org_id: orgId,
           framework,
           sections,
           period_start: new Date(

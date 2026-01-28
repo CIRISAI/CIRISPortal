@@ -230,6 +230,14 @@ This portal operates under the CIRIS Covenant. Key principles:
 - **Fail-Secure** - Unknown users have no access; errors deny rather than allow
 - **Minimal Data** - Store only what's needed for key custody and audit
 
+## Issue Reporting
+
+When encountering bugs or issues with the portal, **do not attempt to fix CIRISRegistry issues from here**. Instead:
+
+1. Document the error and steps to reproduce
+2. Report to the owning org (CIRISRegistry team for backend issues, CIRISPortal team for frontend)
+3. Apply workarounds if available while waiting for fixes
+
 ## Related Projects
 
 | Project           | Purpose                             |

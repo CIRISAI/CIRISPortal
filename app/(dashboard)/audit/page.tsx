@@ -48,7 +48,7 @@ import {
   type AuditEntry,
   type AuditLogFilters,
 } from '@/lib/registry-sdk';
-import { DEMO_ORG_ID } from '@/lib/test-config';
+import { useSession } from 'next-auth/react';
 
 /**
  * Map of action types to display names and icons
@@ -503,6 +503,9 @@ function ExportDialog({
  * Main Audit Page
  */
 export default function AuditPage() {
+  const { data: session } = useSession();
+  const orgId = (session?.user as { orgId?: string })?.orgId;
+
   const [dateRange, setDateRange] = useState('7d');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -511,7 +514,7 @@ export default function AuditPage() {
 
   // Build filters
   const filters: AuditLogFilters = {
-    orgId: DEMO_ORG_ID,
+    orgId: orgId || '',
     pageSize: 50,
   };
 
@@ -549,8 +552,9 @@ export default function AuditPage() {
   });
 
   const handleExport = (format: AuditExportFormat) => {
+    if (!orgId) return;
     exportMutation.mutate({
-      orgId: DEMO_ORG_ID,
+      orgId,
       startTime: filters.startTime,
       endTime: filters.endTime,
       actionTypes: filters.actionTypes,

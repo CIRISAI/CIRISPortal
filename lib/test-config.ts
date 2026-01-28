@@ -1,19 +1,13 @@
 /**
  * Test Environment Configuration
  *
- * These values match the seeded test data in the QA environment.
- * In production, these would come from the authenticated session.
+ * Test organization IDs for devtest credential provider.
+ * Used only by lib/auth/index.ts for test user fixtures.
+ * In production, these values come from the authenticated session.
  */
 
-// Primary test organization (full test data)
-export const TEST_ORG_ID = '29216928-351b-4963-9fcb-bcaa44383a29';
-export const TEST_ADMIN_USER_ID = 'admin@qa-primary.test';
-export const TEST_REGULAR_USER_ID = 'user@qa-primary.test';
-export const TEST_ACTIVE_KEY_ID = 'ed3696ed-4fc0-464f-82f4-354dcc28d2c2';
+// Primary test organization (for QA test users)
+export const TEST_ORG_ID = 'org-qa-primary-test';
 
-// Secondary test organization (minimal data)
-export const TEST_SECONDARY_ORG_ID = '64137114-45b9-4ba1-b65d-ccef001848f4';
-
-// For backwards compatibility during migration
-export const DEMO_ORG_ID = TEST_ORG_ID;
-export const DEMO_USER_ID = TEST_ADMIN_USER_ID;
+// Secondary test organization (for cross-org testing)
+export const TEST_SECONDARY_ORG_ID = 'org-qa-secondary-test';
