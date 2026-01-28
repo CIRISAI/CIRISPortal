@@ -135,6 +135,8 @@ export async function createOrganization(params: {
     primaryEmail: string;
     oauthProvider?: string;
     oauthDomain?: string;
+    orgType?: string; // v1.2.0: ORG_INTERNAL, ORG_PARTNER, ORG_LICENSEE, ORG_COMMUNITY
+    parentOrgId?: string; // v1.2.0: Required if orgType is ORG_LICENSEE
     active?: boolean;
     metadata?: Record<string, string>;
   };
@@ -620,6 +622,252 @@ export async function listRegisteredAgents(params: {
   descending?: boolean;
 }): Promise<any> {
   return promisifyUnary(getAdminClient(), 'listRegisteredAgents', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+// ============================================================================
+// Multi-Org User Management (v1.2.0)
+// ============================================================================
+
+/**
+ * Create a user identity (without org membership)
+ */
+export async function createUser(params: {
+  email: string;
+  name: string;
+  oauthProvider?: string;
+  oauthSubject?: string;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'createUser', {
+    context: buildContext(),
+    user: params,
+  });
+}
+
+/**
+ * Create a user and add to an org in one transaction
+ */
+export async function createUserWithMembership(params: {
+  email: string;
+  name: string;
+  orgId: string;
+  role: string; // OrgRole enum value
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'createUserWithMembership', {
+    context: buildContext(),
+    user: { email: params.email, name: params.name },
+    orgId: params.orgId,
+    role: params.role,
+  });
+}
+
+/**
+ * Get user by ID (includes all org memberships)
+ */
+export async function getUser(params: { userId: string }): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'getUser', {
+    context: buildContext(),
+    userId: params.userId,
+  });
+}
+
+/**
+ * Get user by email (includes all org memberships)
+ */
+export async function getUserByEmail(params: { email: string }): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'getUserByEmail', {
+    context: buildContext(),
+    email: params.email,
+  });
+}
+
+/**
+ * Add an existing user to an organization
+ */
+export async function addUserToOrg(params: {
+  userId: string;
+  orgId: string;
+  role: string;
+  invitedBy?: string;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'addUserToOrg', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+/**
+ * Remove a user from an organization
+ */
+export async function removeUserFromOrg(params: {
+  userId: string;
+  orgId: string;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'removeUserFromOrg', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+/**
+ * Update a user's role in an organization
+ */
+export async function updateUserOrgRole(params: {
+  userId: string;
+  orgId: string;
+  newRole: string;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'updateUserOrgRole', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+/**
+ * List all members of an organization (returns User with single membership)
+ */
+export async function listOrgMembers(params: {
+  orgId: string;
+  pageSize?: number;
+  pageToken?: string;
+  includeInactive?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'listOrgMembers', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+// ============================================================================
+// System User Management (v1.2.0)
+// ============================================================================
+
+/**
+ * Create a system user (global admin)
+ */
+export async function createSystemUser(params: {
+  email: string;
+  name: string;
+  role: string; // SystemRole enum value
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'createSystemUser', {
+    context: buildContext(),
+    user: params,
+  });
+}
+
+/**
+ * Get a system user by ID
+ */
+export async function getSystemUser(params: { userId: string }): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'getSystemUser', {
+    context: buildContext(),
+    userId: params.userId,
+  });
+}
+
+/**
+ * List all system users
+ */
+export async function listSystemUsers(params?: {
+  pageSize?: number;
+  pageToken?: string;
+  includeInactive?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'listSystemUsers', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+/**
+ * Update a system user
+ */
+export async function updateSystemUser(params: {
+  userId: string;
+  name?: string;
+  role?: string;
+  active?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'updateSystemUser', {
+    context: buildContext(),
+    user: params,
+  });
+}
+
+// ============================================================================
+// Organization Hierarchy (v1.2.0)
+// ============================================================================
+
+/**
+ * List child organizations under a parent (for PARTNER → LICENSEE)
+ */
+export async function listChildOrganizations(params: {
+  parentOrgId: string;
+  pageSize?: number;
+  pageToken?: string;
+  includeInactive?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'listChildOrganizations', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+/**
+ * Create a licensee organization under a partner
+ */
+export async function createLicenseeOrganization(params: {
+  organization: {
+    name: string;
+    legalName?: string;
+    primaryEmail: string;
+    oauthDomain?: string;
+  };
+  parentOrgId: string;
+  initialAdmin?: {
+    email: string;
+    name?: string;
+    role?: number;
+    active?: boolean;
+  };
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'createLicenseeOrganization', {
+    context: buildContext(),
+    organization: {
+      ...params.organization,
+      orgType: 'ORG_LICENSEE',
+      active: true,
+    },
+    parentOrgId: params.parentOrgId,
+    initialAdmin: params.initialAdmin,
+  });
+}
+
+/**
+ * Get organization hierarchy (ancestors and children)
+ */
+export async function getOrganizationHierarchy(params: {
+  orgId: string;
+  includeAncestors?: boolean;
+  includeDescendants?: boolean;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'getOrganizationHierarchy', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+/**
+ * Upgrade a COMMUNITY org to PARTNER (SYSTEM_ADMIN only)
+ */
+export async function upgradeToPartner(params: {
+  orgId: string;
+  partnerLicenseType?: string;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'upgradeToPartner', {
     context: buildContext(),
     ...params,
   });
