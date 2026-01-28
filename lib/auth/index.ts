@@ -279,15 +279,17 @@ export const authOptions: NextAuthOptions = {
 
       // For other domains, check if user exists in registry
       // (must be pre-added by an admin)
-      const userExists = await checkUserExists(email);
-      if (!userExists) {
+      const result = await checkUserExists(email);
+      if (!result.exists) {
         console.warn(
           `[Auth] Rejected login: ${email} not found in registry (must be pre-added)`
         );
         return false;
       }
 
-      console.log(`[Auth] Allowing login for pre-registered user: ${email}`);
+      console.log(
+        `[Auth] Allowing login for pre-registered user: ${email} in org ${result.orgId}`
+      );
       return true;
     },
   },

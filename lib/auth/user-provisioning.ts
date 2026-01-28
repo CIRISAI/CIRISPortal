@@ -11,6 +11,7 @@ import {
   getOrgUserByEmail,
   createOrgUser,
   updateOrgUser,
+  listOrganizations,
 } from '../grpc/client';
 
 /**
@@ -91,36 +92,59 @@ function domainToOrgId(domain: string): string {
  * Check if a user exists in the registry
  *
  * Used during signIn to verify non-CIRIS users have been pre-added.
- * Returns true if:
- * - User is from @ciris.ai (always allowed)
- * - User exists in their domain's organization
+ * Returns the orgId if found, null otherwise.
+ * - CIRIS internal users (@ciris.ai) always allowed
+ * - Other users must exist in some organization
  */
-export async function checkUserExists(email: string): Promise<boolean> {
+export async function checkUserExists(
+  email: string
+): Promise<{ exists: boolean; orgId?: string }> {
   const domain = email.split('@')[1]?.toLowerCase();
-  if (!domain) return false;
+  if (!domain) return { exists: false };
 
   // CIRIS internal users are always allowed
   if (domain === CIRIS_ORG.domain) {
-    return true;
+    return { exists: true, orgId: CIRIS_ORG.id };
   }
 
-  // For other domains, check if user exists in registry
-  const orgId = domainToOrgId(domain);
-
+  // First, try the domain-based org (fast path for corporate domains)
+  const domainOrgId = domainToOrgId(domain);
   try {
-    const response = await getOrgUserByEmail({ orgId, email });
-    return !!response.user;
-  } catch (error) {
-    // User not found or org doesn't exist
-    const err = error as { code?: number; message?: string };
-    if (err.code === 5 || err.message?.includes('not found')) {
-      console.log(`[Auth] User ${email} not found in registry`);
-      return false;
+    const response = await getOrgUserByEmail({ orgId: domainOrgId, email });
+    if (response.user) {
+      console.log(`[Auth] Found user ${email} in domain org ${domainOrgId}`);
+      return { exists: true, orgId: domainOrgId };
     }
-    // On other errors, log and deny for safety
-    console.error(`[Auth] Error checking user ${email}:`, error);
-    return false;
+  } catch {
+    // Not in domain org, continue to search all orgs
   }
+
+  // For personal emails (Gmail, etc.), search across all organizations
+  try {
+    const orgsResponse = await listOrganizations({ pageSize: 100 });
+    const orgs = orgsResponse.organizations || [];
+
+    for (const org of orgs) {
+      if (!org.orgId || org.orgId === domainOrgId) continue; // Skip already checked
+      try {
+        const userResponse = await getOrgUserByEmail({
+          orgId: org.orgId,
+          email,
+        });
+        if (userResponse.user) {
+          console.log(`[Auth] Found user ${email} in org ${org.orgId}`);
+          return { exists: true, orgId: org.orgId };
+        }
+      } catch {
+        // User not in this org, continue
+      }
+    }
+  } catch (error) {
+    console.error(`[Auth] Error searching orgs for user ${email}:`, error);
+  }
+
+  console.log(`[Auth] User ${email} not found in any organization`);
+  return { exists: false };
 }
 
 /**

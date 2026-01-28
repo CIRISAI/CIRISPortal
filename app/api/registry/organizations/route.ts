@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listOrganizations, createOrganization } from '@/lib/grpc/client';
+import {
+  listOrganizations,
+  createOrganization,
+  createOrgUser,
+} from '@/lib/grpc/client';
 
 /**
  * GET /api/registry/organizations
@@ -74,6 +78,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: response.error.message || 'Failed to create organization' },
         { status: 400 }
+      );
+    }
+
+    // Also create the primary contact as an admin user in the org
+    try {
+      await createOrgUser({
+        user: {
+          orgId,
+          email: primaryEmail,
+          displayName: primaryEmail.split('@')[0],
+          role: 'ORG_ADMIN',
+        },
+      });
+      console.log(`[API] Created admin user ${primaryEmail} in org ${orgId}`);
+    } catch (userError) {
+      // Log but don't fail - org was created successfully
+      console.warn(
+        `[API] Failed to create admin user for org ${orgId}:`,
+        userError
       );
     }
 
