@@ -441,36 +441,41 @@ export async function provisionUser(
     `[Provisioning] Starting for ${email} (domain: ${domain}, provider: ${oauthProvider})`
   );
 
-  // First, check if user already exists in some org (for pre-added users)
-  const existingUser = await checkUserExists(email);
-
   let orgId: string;
   let orgName: string;
   let isNewOrg = false;
 
-  if (existingUser.exists && existingUser.orgId) {
-    // User was pre-added to an org - use that org
-    orgId = existingUser.orgId;
-    try {
-      const orgResponse = await getOrganization(orgId);
-      orgName = orgResponse.organization?.name || orgId;
-    } catch {
-      orgName = orgId;
-    }
-    console.log(`[Provisioning] Using pre-existing org ${orgId} for ${email}`);
-  } else if (isCirisInternal) {
-    // CIRIS internal users - auto-create org if needed
+  if (isCirisInternal) {
+    // CIRIS internal users - always auto-create org/user if needed
+    // This ensures ciris-internal org exists before we try to use it
     const orgResult = await getOrCreateOrganization(domain, email);
     orgId = orgResult.orgId;
     orgName = orgResult.orgName;
     isNewOrg = orgResult.isNew;
   } else {
-    // Non-CIRIS user not found in any org - shouldn't happen if auth check passed
-    throw new ProvisioningError(
-      `User ${email} not found in any organization`,
-      'USER_NOT_FOUND',
-      false
-    );
+    // Non-CIRIS users must be pre-added to an org
+    const existingUser = await checkUserExists(email);
+
+    if (existingUser.exists && existingUser.orgId) {
+      // User was pre-added to an org - use that org
+      orgId = existingUser.orgId;
+      try {
+        const orgResponse = await getOrganization(orgId);
+        orgName = orgResponse.organization?.name || orgId;
+      } catch {
+        orgName = orgId;
+      }
+      console.log(
+        `[Provisioning] Using pre-existing org ${orgId} for ${email}`
+      );
+    } else {
+      // Non-CIRIS user not found in any org - shouldn't happen if auth check passed
+      throw new ProvisioningError(
+        `User ${email} not found in any organization`,
+        'USER_NOT_FOUND',
+        false
+      );
+    }
   }
 
   // Determine default role for new users
