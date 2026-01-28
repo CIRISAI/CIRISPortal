@@ -17,6 +17,7 @@ import {
   Bot,
   ShieldAlert,
   BadgeCheck,
+  ShieldCheck,
 } from 'lucide-react';
 
 type NavItem = {
@@ -86,6 +87,12 @@ const navigation: NavItem[] = [
 
 // Admin-only navigation section
 const adminNavigation: NavItem[] = [
+  {
+    name: 'System Users',
+    href: '/admin/system-users',
+    icon: ShieldCheck,
+    roles: ['admin'],
+  },
   {
     name: 'Partner Licenses',
     href: '/admin/partners',

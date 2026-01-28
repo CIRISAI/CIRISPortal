@@ -37,19 +37,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Shield, Users, Search, Upload, RefreshCw } from 'lucide-react';
+import {
+  Plus,
+  Shield,
+  Users,
+  Search,
+  Upload,
+  RefreshCw,
+  UserPlus,
+  UserSearch,
+} from 'lucide-react';
 import { useSession } from 'next-auth/react';
+
+interface OrgMembership {
+  orgId: string;
+  orgName: string;
+  orgType: string;
+  role: string;
+  invitedBy?: string;
+  createdAtIso?: string;
+}
 
 interface OrgUser {
   userId: string;
   orgId: string;
   email: string;
   displayName: string;
+  name?: string; // v1.2.0 uses name
   role: string;
   mfaEnabled: boolean;
   active: boolean;
   lastLoginAt: string;
   createdAt: string;
+  memberships?: OrgMembership[]; // v1.2.0 multi-org memberships
 }
 
 const ROLES = [
@@ -99,6 +119,12 @@ const formatDate = (timestamp: string) => {
   });
 };
 
+// Get count of other orgs this user belongs to (excluding current org)
+const getOtherOrgsCount = (user: OrgUser, currentOrgId?: string) => {
+  if (!user.memberships || user.memberships.length <= 1) return 0;
+  return user.memberships.filter((m) => m.orgId !== currentOrgId).length;
+};
+
 export default function UsersPage() {
   const { data: session } = useSession();
   const orgId = (session?.user as { orgId?: string })?.orgId;
@@ -106,13 +132,18 @@ export default function UsersPage() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createMode, setCreateMode] = useState<'new' | 'existing'>('new');
   const [newUser, setNewUser] = useState({
     email: '',
     display_name: '',
     role: 'ORG_VIEWER',
   });
+  const [existingUserSearch, setExistingUserSearch] = useState('');
+  const [foundUser, setFoundUser] = useState<OrgUser | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Fetch users
+  // Fetch users with v1.2.0 membership data
   const {
     data: usersData,
     isLoading,
@@ -122,14 +153,39 @@ export default function UsersPage() {
     queryKey: ['users', orgId],
     queryFn: async () => {
       if (!orgId) throw new Error('No organization');
-      const response = await fetch(`/api/registry/users?org_id=${orgId}`);
+      // Use members=true to get v1.2.0 User objects with membership info
+      const response = await fetch(
+        `/api/registry/users?org_id=${orgId}&members=true`
+      );
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },
     enabled: !!orgId,
   });
 
-  // Create user mutation
+  // Search for existing user by email
+  const searchExistingUser = async (email: string) => {
+    setIsSearching(true);
+    setSearchError(null);
+    setFoundUser(null);
+    try {
+      const response = await fetch(
+        `/api/registry/users?email=${encodeURIComponent(email)}&org_id=${orgId}`
+      );
+      const data = await response.json();
+      if (data.data) {
+        setFoundUser(data.data);
+      } else {
+        setSearchError('No user found with this email');
+      }
+    } catch {
+      setSearchError('Error searching for user');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Create user mutation (v1.2.0: creates User + membership)
   const createUserMutation = useMutation({
     mutationFn: async (userData: typeof newUser) => {
       if (!orgId) throw new Error('No organization');
@@ -137,9 +193,11 @@ export default function UsersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'create',
+          action: 'create_with_membership',
           org_id: orgId,
-          ...userData,
+          email: userData.email,
+          name: userData.display_name,
+          role: userData.role,
         }),
       });
       if (!response.ok) {
@@ -151,6 +209,35 @@ export default function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setIsCreateOpen(false);
+      setNewUser({ email: '', display_name: '', role: 'ORG_VIEWER' });
+    },
+  });
+
+  // Add existing user to org mutation
+  const addUserToOrgMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+      if (!orgId) throw new Error('No organization');
+      const response = await fetch('/api/registry/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_to_org',
+          org_id: orgId,
+          user_id: userId,
+          role,
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to add user to organization');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setIsCreateOpen(false);
+      setFoundUser(null);
+      setExistingUserSearch('');
       setNewUser({ email: '', display_name: '', role: 'ORG_VIEWER' });
     },
   });
@@ -217,74 +304,222 @@ export default function UsersPage() {
                 Add User
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Add New User</DialogTitle>
+                <DialogTitle>Add User to Organization</DialogTitle>
                 <DialogDescription>
-                  Invite a new user to the organization.
+                  Create a new user or add an existing user to this
+                  organization.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="user@example.com"
-                    value={newUser.email}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, email: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Display Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="John Doe"
-                    value={newUser.display_name}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, display_name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={newUser.role}
-                    onValueChange={(value) =>
-                      setNewUser({ ...newUser, role: value })
-                    }
+                {/* Mode Toggle */}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={createMode === 'new' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => {
+                      setCreateMode('new');
+                      setFoundUser(null);
+                      setSearchError(null);
+                    }}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ROLES.map((role) => (
-                        <SelectItem key={role.value} value={role.value}>
-                          {role.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {ROLES.find((r) => r.value === newUser.role)?.description}
-                  </p>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Create new user
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={createMode === 'existing' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => {
+                      setCreateMode('existing');
+                    }}
+                  >
+                    <UserSearch className="mr-2 h-4 w-4" />
+                    Add existing user
+                  </Button>
                 </div>
+
+                {createMode === 'new' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email Address</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="user@example.com"
+                        value={newUser.email}
+                        onChange={(e) =>
+                          setNewUser({ ...newUser, email: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Display Name</Label>
+                      <Input
+                        id="name"
+                        placeholder="John Doe"
+                        value={newUser.display_name}
+                        onChange={(e) =>
+                          setNewUser({
+                            ...newUser,
+                            display_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="role">Role</Label>
+                      <Select
+                        value={newUser.role}
+                        onValueChange={(value) =>
+                          setNewUser({ ...newUser, role: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ROLES.map((role) => (
+                            <SelectItem key={role.value} value={role.value}>
+                              {role.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {
+                          ROLES.find((r) => r.value === newUser.role)
+                            ?.description
+                        }
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="search-email">Search by Email</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="search-email"
+                          type="email"
+                          placeholder="user@example.com"
+                          value={existingUserSearch}
+                          onChange={(e) =>
+                            setExistingUserSearch(e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && existingUserSearch) {
+                              e.preventDefault();
+                              searchExistingUser(existingUserSearch);
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => searchExistingUser(existingUserSearch)}
+                          disabled={!existingUserSearch || isSearching}
+                        >
+                          {isSearching ? 'Searching...' : 'Search'}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {searchError && (
+                      <p className="text-sm text-destructive">{searchError}</p>
+                    )}
+
+                    {foundUser && (
+                      <div className="rounded-lg border bg-muted/50 p-4">
+                        <div className="font-medium">
+                          {foundUser.displayName ||
+                            foundUser.name ||
+                            foundUser.email}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {foundUser.email}
+                        </div>
+                        {foundUser.memberships &&
+                          foundUser.memberships.length > 0 && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              Current memberships:{' '}
+                              {foundUser.memberships
+                                .map(
+                                  (m) => `${m.orgName} (${formatRole(m.role)})`
+                                )
+                                .join(', ')}
+                            </div>
+                          )}
+                      </div>
+                    )}
+
+                    {foundUser && (
+                      <div className="space-y-2">
+                        <Label htmlFor="existing-role">
+                          Role in this organization
+                        </Label>
+                        <Select
+                          value={newUser.role}
+                          onValueChange={(value) =>
+                            setNewUser({ ...newUser, role: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLES.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <DialogFooter>
                 <Button
                   variant="outline"
-                  onClick={() => setIsCreateOpen(false)}
+                  onClick={() => {
+                    setIsCreateOpen(false);
+                    setFoundUser(null);
+                    setSearchError(null);
+                    setExistingUserSearch('');
+                    setCreateMode('new');
+                  }}
                 >
                   Cancel
                 </Button>
-                <Button
-                  onClick={() => createUserMutation.mutate(newUser)}
-                  disabled={!newUser.email || createUserMutation.isPending}
-                >
-                  {createUserMutation.isPending ? 'Creating...' : 'Add User'}
-                </Button>
+                {createMode === 'new' ? (
+                  <Button
+                    onClick={() => createUserMutation.mutate(newUser)}
+                    disabled={!newUser.email || createUserMutation.isPending}
+                  >
+                    {createUserMutation.isPending
+                      ? 'Creating...'
+                      : 'Create User'}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() =>
+                      foundUser &&
+                      addUserToOrgMutation.mutate({
+                        userId: foundUser.userId,
+                        role: newUser.role,
+                      })
+                    }
+                    disabled={!foundUser || addUserToOrgMutation.isPending}
+                  >
+                    {addUserToOrgMutation.isPending
+                      ? 'Adding...'
+                      : 'Add to Organization'}
+                  </Button>
+                )}
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -389,13 +624,21 @@ export default function UsersPage() {
                 {filteredUsers.map((user) => (
                   <TableRow key={user.userId || user.email}>
                     <TableCell className="font-medium">
-                      {user.displayName || '-'}
+                      {user.displayName || user.name || '-'}
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <Badge variant={getRoleBadgeVariant(user.role)}>
-                        {formatRole(user.role)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getRoleBadgeVariant(user.role)}>
+                          {formatRole(user.role)}
+                        </Badge>
+                        {getOtherOrgsCount(user, orgId) > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{getOtherOrgsCount(user, orgId)} other org
+                            {getOtherOrgsCount(user, orgId) > 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {user.mfaEnabled ? (

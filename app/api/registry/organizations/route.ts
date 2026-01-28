@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listOrganizations, createOrganization } from '@/lib/grpc/client';
+import {
+  listOrganizations,
+  createOrganization,
+  createLicenseeOrganization,
+} from '@/lib/grpc/client';
 
 /**
  * CIRIS Internal Organization - must match user-provisioning.ts
@@ -49,11 +53,20 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, primaryEmail, oauthDomain, legalName } = body;
+    const { name, primaryEmail, oauthDomain, legalName, orgType, parentOrgId } =
+      body;
 
     if (!name || !primaryEmail) {
       return NextResponse.json(
         { error: 'Missing required fields: name, primaryEmail' },
+        { status: 400 }
+      );
+    }
+
+    // Validate LICENSEE requires parentOrgId
+    if (orgType === 'ORG_LICENSEE' && !parentOrgId) {
+      return NextResponse.json(
+        { error: 'Licensee organizations require a parent organization' },
         { status: 400 }
       );
     }
@@ -67,6 +80,55 @@ export async function POST(request: NextRequest) {
         ? `org-${oauthDomain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
         : `org-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
 
+    // For LICENSEE orgs, use the dedicated createLicenseeOrganization RPC
+    if (orgType === 'ORG_LICENSEE' && parentOrgId) {
+      const response = await createLicenseeOrganization({
+        organization: {
+          name,
+          legalName,
+          primaryEmail,
+          oauthDomain: oauthDomain || undefined,
+        },
+        parentOrgId,
+        initialAdmin: {
+          email: primaryEmail,
+          name: primaryEmail.split('@')[0],
+          role: 100, // ORG_ADMIN
+          active: true,
+        },
+      });
+
+      if (response.error) {
+        return NextResponse.json(
+          {
+            error:
+              response.error.message ||
+              'Failed to create licensee organization',
+          },
+          { status: 400 }
+        );
+      }
+
+      const actualOrgId =
+        response.orgId || response.organization?.orgId || orgId;
+      console.log(
+        `[API] Created licensee org ${actualOrgId} under parent ${parentOrgId}`
+      );
+
+      return NextResponse.json({
+        orgId: actualOrgId,
+        name,
+        primaryEmail,
+        oauthDomain: oauthDomain || null,
+        orgType: 'ORG_LICENSEE',
+        parentOrgId,
+        active: true,
+        createdAt: new Date().toISOString(),
+        adminUserId: response.adminUserId,
+      });
+    }
+
+    // Standard org creation (COMMUNITY, PARTNER, INTERNAL)
     // Atomic creation: org + initial admin in same transaction
     // Role 100 = ORG_ADMIN in the proto enum
     const response = await createOrganization({
@@ -77,6 +139,7 @@ export async function POST(request: NextRequest) {
         primaryEmail,
         oauthProvider: 'google',
         oauthDomain: oauthDomain || undefined,
+        orgType: orgType || 'ORG_COMMUNITY',
         active: true,
         metadata: {
           createdVia: 'portal',
@@ -102,7 +165,7 @@ export async function POST(request: NextRequest) {
     const actualOrgId = response.orgId || response.organization?.orgId || orgId;
 
     console.log(
-      `[API] Created org ${actualOrgId} with admin user ${primaryEmail} atomically`
+      `[API] Created org ${actualOrgId} (${orgType || 'ORG_COMMUNITY'}) with admin user ${primaryEmail} atomically`
     );
 
     return NextResponse.json({
@@ -110,6 +173,7 @@ export async function POST(request: NextRequest) {
       name,
       primaryEmail,
       oauthDomain: oauthDomain || null,
+      orgType: orgType || 'ORG_COMMUNITY',
       active: true,
       createdAt: new Date().toISOString(),
       adminUserId: response.adminUserId,
