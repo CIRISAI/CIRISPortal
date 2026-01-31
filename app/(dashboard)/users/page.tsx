@@ -153,10 +153,8 @@ export default function UsersPage() {
     queryKey: ['users', orgId],
     queryFn: async () => {
       if (!orgId) throw new Error('No organization');
-      // Use members=true to get v1.2.0 User objects with membership info
-      const response = await fetch(
-        `/api/registry/users?org_id=${orgId}&members=true`
-      );
+      // TODO: Use members=true when registry implements ListOrgMembers
+      const response = await fetch(`/api/registry/users?org_id=${orgId}`);
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },

@@ -6,7 +6,6 @@ import { getAppEnv, getAuthConfig } from '../env';
 import { TEST_ORG_ID, TEST_SECONDARY_ORG_ID } from '../test-config';
 import {
   provisionUser,
-  getFallbackUserInfo,
   checkUserExists,
   ProvisioningError,
   type UserRole,
@@ -126,7 +125,8 @@ function buildProviders() {
 }
 
 /**
- * Provision user and handle errors gracefully
+ * Provision user - requires registry to be available
+ * No fallbacks - using incorrect org IDs breaks all subsequent queries
  */
 async function safeProvisionUser(
   email: string,
@@ -140,22 +140,11 @@ async function safeProvisionUser(
       console.error(
         `[Auth] Provisioning error (${error.code}): ${error.message}`
       );
-
-      if (error.recoverable) {
-        // Use fallback for recoverable errors (registry unavailable, etc.)
-        console.warn(
-          '[Auth] Using fallback user info due to provisioning error'
-        );
-        return getFallbackUserInfo(email, name);
-      }
-
-      // Non-recoverable errors should block login
-      throw error;
+    } else {
+      console.error('[Auth] Unknown provisioning error:', error);
     }
-
-    // Unknown error - log and use fallback
-    console.error('[Auth] Unknown provisioning error:', error);
-    return getFallbackUserInfo(email, name);
+    // Always re-throw - no fallbacks allowed
+    throw error;
   }
 }
 
@@ -214,15 +203,10 @@ export const authOptions: NextAuthOptions = {
             }
           } catch (error) {
             console.error('[Auth] Failed to provision user:', error);
-            // Don't block login - use minimal fallback
-            const fallback = getFallbackUserInfo(
-              user.email,
-              user.name || user.email.split('@')[0]
+            // Registry must be available - don't allow login with stale/incorrect data
+            throw new Error(
+              'Unable to verify user access. Please try again later.'
             );
-            token.userId = fallback.userId;
-            token.orgId = fallback.orgId;
-            token.orgName = fallback.orgName;
-            token.role = fallback.role;
           }
         }
       }
