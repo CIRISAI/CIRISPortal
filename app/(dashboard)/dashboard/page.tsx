@@ -377,26 +377,38 @@ function RegistryHealthCard() {
     );
   }
 
-  const statusText = {
-    [HealthStatus.SERVING]: 'Healthy',
-    [HealthStatus.DEGRADED]: 'Degraded',
-    [HealthStatus.NOT_SERVING]: 'Offline',
-    [HealthStatus.UNSPECIFIED]: 'Unknown',
-  };
+  // Handle both string (from API) and enum (from types) status values
+  const isServing =
+    health.status === HealthStatus.SERVING ||
+    health.status === ('HEALTH_SERVING' as unknown as HealthStatus);
+  const isDegraded =
+    health.status === HealthStatus.DEGRADED ||
+    health.status === ('HEALTH_DEGRADED' as unknown as HealthStatus);
+  const isNotServing =
+    health.status === HealthStatus.NOT_SERVING ||
+    health.status === ('HEALTH_NOT_SERVING' as unknown as HealthStatus);
 
-  const statusColor = {
-    [HealthStatus.SERVING]: 'text-green-600',
-    [HealthStatus.DEGRADED]: 'text-yellow-600',
-    [HealthStatus.NOT_SERVING]: 'text-red-600',
-    [HealthStatus.UNSPECIFIED]: 'text-gray-600',
-  };
+  const statusText = isServing
+    ? 'Healthy'
+    : isDegraded
+      ? 'Degraded'
+      : isNotServing
+        ? 'Offline'
+        : 'Unknown';
 
-  const healthIndicator =
-    health.status === HealthStatus.SERVING
-      ? 'healthy'
-      : health.status === HealthStatus.DEGRADED
-        ? 'warning'
-        : 'critical';
+  const statusColor = isServing
+    ? 'text-green-600'
+    : isDegraded
+      ? 'text-yellow-600'
+      : isNotServing
+        ? 'text-red-600'
+        : 'text-gray-600';
+
+  const healthIndicator = isServing
+    ? 'healthy'
+    : isDegraded
+      ? 'warning'
+      : 'critical';
 
   return (
     <Card>
@@ -408,9 +420,7 @@ function RegistryHealthCard() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className={`text-2xl font-bold ${statusColor[health.status]}`}>
-          {statusText[health.status]}
-        </div>
+        <div className={`text-2xl font-bold ${statusColor}`}>{statusText}</div>
         <div className="flex flex-col gap-1 text-xs text-muted-foreground">
           {health.version && <span>v{health.version}</span>}
           {health.databaseHealthy !== undefined && (
