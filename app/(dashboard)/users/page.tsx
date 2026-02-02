@@ -104,7 +104,8 @@ const getRoleBadgeVariant = (role: string) => {
   }
 };
 
-const formatRole = (role: string) => {
+const formatRole = (role: string | undefined | null) => {
+  if (!role || typeof role !== 'string') return 'Unknown';
   const found = ROLES.find((r) => r.value === role);
   return found?.label || role.replace('ORG_', '');
 };
