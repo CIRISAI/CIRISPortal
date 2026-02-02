@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   ScrollText,
   Filter,
@@ -512,23 +512,36 @@ export default function AuditPage() {
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
-  // Build filters - memoized to prevent infinite re-renders
-  // Date.now() changes every render, so we round to nearest minute for stability
+  // Calculate stable time range - only recalculate when dateRange changes
+  const getTimeRange = (range: string) => {
+    const rangeConfig = dateRanges.find((r) => r.value === range);
+    if (rangeConfig && rangeConfig.ms > 0) {
+      const now = Date.now();
+      return { startTime: now - rangeConfig.ms, endTime: now };
+    }
+    return null;
+  };
+
+  // Store time range in state - only updates when dateRange changes
+  const [timeRange, setTimeRange] = useState(() => getTimeRange(dateRange));
+
+  // Update time range when dateRange changes
+  useEffect(() => {
+    setTimeRange(getTimeRange(dateRange));
+  }, [dateRange]);
+
+  // Build filters with stable references
   const filters: AuditLogFilters = useMemo(() => {
     const result: AuditLogFilters = {
       orgId: orgId || '',
       pageSize: 50,
     };
 
-    // Add date range filter - round to nearest minute to prevent constant changes
-    const rangeConfig = dateRanges.find((r) => r.value === dateRange);
-    if (rangeConfig && rangeConfig.ms > 0) {
-      const now = Math.floor(Date.now() / 60000) * 60000; // Round to minute
-      result.startTime = now - rangeConfig.ms;
-      result.endTime = now;
+    if (timeRange) {
+      result.startTime = timeRange.startTime;
+      result.endTime = timeRange.endTime;
     }
 
-    // Add action type filters based on selected categories
     if (selectedCategories.length > 0) {
       const actionTypes: AuditActionType[] = [];
       for (const [action, config] of Object.entries(actionConfig)) {
@@ -542,7 +555,7 @@ export default function AuditPage() {
     }
 
     return result;
-  }, [orgId, dateRange, selectedCategories]);
+  }, [orgId, timeRange, selectedCategories]);
 
   // Fetch audit log - add staleTime to prevent infinite refetches
   const {
