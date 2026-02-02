@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ScrollText,
   Filter,
@@ -512,31 +512,37 @@ export default function AuditPage() {
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
-  // Build filters
-  const filters: AuditLogFilters = {
-    orgId: orgId || '',
-    pageSize: 50,
-  };
+  // Build filters - memoized to prevent infinite re-renders
+  // Date.now() changes every render, so we round to nearest minute for stability
+  const filters: AuditLogFilters = useMemo(() => {
+    const result: AuditLogFilters = {
+      orgId: orgId || '',
+      pageSize: 50,
+    };
 
-  // Add date range filter
-  const rangeConfig = dateRanges.find((r) => r.value === dateRange);
-  if (rangeConfig && rangeConfig.ms > 0) {
-    filters.startTime = Date.now() - rangeConfig.ms;
-    filters.endTime = Date.now();
-  }
+    // Add date range filter - round to nearest minute to prevent constant changes
+    const rangeConfig = dateRanges.find((r) => r.value === dateRange);
+    if (rangeConfig && rangeConfig.ms > 0) {
+      const now = Math.floor(Date.now() / 60000) * 60000; // Round to minute
+      result.startTime = now - rangeConfig.ms;
+      result.endTime = now;
+    }
 
-  // Add action type filters based on selected categories
-  if (selectedCategories.length > 0) {
-    const actionTypes: AuditActionType[] = [];
-    for (const [action, config] of Object.entries(actionConfig)) {
-      if (selectedCategories.includes(config.category)) {
-        actionTypes.push(parseInt(action) as AuditActionType);
+    // Add action type filters based on selected categories
+    if (selectedCategories.length > 0) {
+      const actionTypes: AuditActionType[] = [];
+      for (const [action, config] of Object.entries(actionConfig)) {
+        if (selectedCategories.includes(config.category)) {
+          actionTypes.push(parseInt(action) as AuditActionType);
+        }
+      }
+      if (actionTypes.length > 0) {
+        result.actionTypes = actionTypes;
       }
     }
-    if (actionTypes.length > 0) {
-      filters.actionTypes = actionTypes;
-    }
-  }
+
+    return result;
+  }, [orgId, dateRange, selectedCategories]);
 
   // Fetch audit log
   const { data: auditData, isLoading, error, refetch } = useAuditLog(filters);

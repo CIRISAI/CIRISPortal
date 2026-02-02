@@ -25,14 +25,25 @@ export async function GET(
     // Map response to what the SDK expects
     const partner = response.partner;
 
+    // Map status to numeric enum (SDK expects 0=UNSPECIFIED, 1=ACTIVE, 2=SUSPENDED, 3=REVOKED)
+    const mapStatus = (status: unknown): number => {
+      if (typeof status === 'number') return status;
+      const statusStr = String(status);
+      if (statusStr === 'PARTNER_STATUS_ACTIVE' || statusStr === '1') return 1;
+      if (statusStr === 'PARTNER_STATUS_SUSPENDED' || statusStr === '2')
+        return 2;
+      if (statusStr === 'PARTNER_STATUS_REVOKED' || statusStr === '3') return 3;
+      return 1; // Default to ACTIVE
+    };
+
     return NextResponse.json({
       found: true,
       partner: {
         partnerId: partner.partnerId || partnerId,
         orgId: partner.orgId || partnerId,
         organizationName: partner.organizationName || partner.name || 'Unknown',
-        status: partner.status || 'PARTNER_STATUS_ACTIVE',
-        licenseType: partner.licenseType || 'LICENSE_BASIC',
+        status: mapStatus(partner.status),
+        licenseType: partner.licenseType || 1,
         expiresAt: partner.expiresAt
           ? parseInt(partner.expiresAt) * 1000
           : Date.now() + 90 * 24 * 60 * 60 * 1000,
