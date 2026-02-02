@@ -544,8 +544,18 @@ export default function AuditPage() {
     return result;
   }, [orgId, dateRange, selectedCategories]);
 
-  // Fetch audit log
-  const { data: auditData, isLoading, error, refetch } = useAuditLog(filters);
+  // Fetch audit log - add staleTime to prevent infinite refetches
+  const {
+    data: auditData,
+    isLoading,
+    error,
+    refetch,
+  } = useAuditLog(filters, {
+    staleTime: 60 * 1000, // Data is fresh for 1 minute
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+  });
 
   // Export mutation
   const exportMutation = useExportAuditLog({

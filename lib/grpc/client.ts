@@ -432,7 +432,7 @@ export async function lookupAgent(params: { agentHash: string }): Promise<any> {
 export async function lookupPartner(params: { orgId: string }): Promise<any> {
   return promisifyUnary(getRegistryClient(), 'lookupPartner', {
     context: buildContext(),
-    ...params,
+    partnerId: params.orgId, // Proto expects partner_id, not org_id
   });
 }
 
