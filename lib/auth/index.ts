@@ -11,6 +11,10 @@ import {
   type UserRole,
   type ProvisionedUser,
 } from './user-provisioning';
+import { createAuditEntry } from '../grpc/client';
+
+// AuditActionType enum values from proto
+const AUDIT_USER_LOGIN = 13;
 
 // Re-export types
 export type { UserRole, ProvisionedUser };
@@ -177,6 +181,20 @@ export const authOptions: NextAuthOptions = {
           console.log(
             `[Auth] Test user login: ${user.email} as ${testUser.role}`
           );
+
+          // Record audit entry for test user login (fire and forget)
+          createAuditEntry({
+            action: AUDIT_USER_LOGIN,
+            actorUserId: testUser.id,
+            actorOrgId: testUser.orgId,
+            description: `Test user login: ${user.email}`,
+            metadata: {
+              provider: account.provider,
+              role: testUser.role,
+            },
+          }).catch((err) => {
+            console.warn('[Auth] Failed to record login audit entry:', err);
+          });
         } else if (user.email) {
           // OAuth users: provision via registry
           try {
@@ -201,6 +219,22 @@ export const authOptions: NextAuthOptions = {
             if (provisionedUser.isNewOrg) {
               console.log(`[Auth] New org created: ${provisionedUser.orgId}`);
             }
+
+            // Record audit entry for OAuth user login (fire and forget)
+            createAuditEntry({
+              action: AUDIT_USER_LOGIN,
+              actorUserId: provisionedUser.userId,
+              actorOrgId: provisionedUser.orgId,
+              description: `User login: ${user.email}`,
+              metadata: {
+                provider: account.provider,
+                role: provisionedUser.role,
+                isNewUser: String(provisionedUser.isNewUser),
+                isNewOrg: String(provisionedUser.isNewOrg),
+              },
+            }).catch((err) => {
+              console.warn('[Auth] Failed to record login audit entry:', err);
+            });
           } catch (error) {
             console.error('[Auth] Failed to provision user:', error);
             // Registry must be available - don't allow login with stale/incorrect data

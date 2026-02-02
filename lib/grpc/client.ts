@@ -872,3 +872,35 @@ export async function upgradeToPartner(params: {
     ...params,
   });
 }
+
+// ============================================================================
+// Audit Methods (v1.2.0)
+// ============================================================================
+
+/**
+ * Create an audit entry (for Portal to record login/logout events)
+ */
+export async function createAuditEntry(params: {
+  action: number; // AuditActionType enum
+  actorUserId?: string;
+  actorOrgId?: string;
+  actorIpAddress?: string;
+  actorUserAgent?: string;
+  targetType?: string;
+  targetId?: string;
+  description?: string;
+  metadata?: Record<string, string>;
+}): Promise<any> {
+  return promisifyUnary(getPortalClient(), 'createAuditEntry', {
+    context: buildContext(),
+    action: params.action,
+    actorUserId: params.actorUserId,
+    actorOrgId: params.actorOrgId,
+    actorIpAddress: params.actorIpAddress,
+    actorUserAgent: params.actorUserAgent,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    description: params.description,
+    metadata: params.metadata,
+  });
+}
