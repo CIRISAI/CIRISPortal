@@ -255,7 +255,7 @@ async function getOrCreateOrganization(
       initialAdmin: {
         email: primaryEmail,
         name: primaryEmail.split('@')[0],
-        role: 100, // ORG_ADMIN
+        role: 1, // ORG_ADMIN (enum value from proto)
         active: true,
       },
     });
