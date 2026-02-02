@@ -12,6 +12,7 @@ import {
   createOrgUser,
   updateOrgUser,
   listOrganizations,
+  createSystemUser,
 } from '../grpc/client';
 
 /**
@@ -246,6 +247,7 @@ async function getOrCreateOrganization(
         primaryEmail,
         oauthProvider: 'google',
         oauthDomain: domain,
+        orgType: isCirisInternal ? 'ORG_INTERNAL' : 'ORG_PARTNER',
         active: true,
         metadata: {
           autoCreated: 'true',
@@ -548,6 +550,27 @@ export async function provisionUser(
     role,
     isNew: isNewUser,
   } = await getOrCreateUser(orgId, email, name, defaultRole, isCirisInternal);
+
+  // CIRIS internal users also need a system_user record for admin access
+  if (isCirisInternal) {
+    try {
+      await createSystemUser({
+        email,
+        name,
+        role: 'SYSTEM_ADMIN',
+      });
+      console.log(`[Provisioning] Created system user for ${email}`);
+    } catch (error) {
+      const err = error as { message?: string };
+      // Ignore duplicate key errors - user already exists as system user
+      if (
+        !err.message?.includes('duplicate') &&
+        !err.message?.includes('already exists')
+      ) {
+        console.warn(`[Provisioning] Failed to create system user:`, error);
+      }
+    }
+  }
 
   const result: ProvisionedUser = {
     userId,
