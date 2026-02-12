@@ -260,7 +260,7 @@ export class RegistryClient {
     this.baseUrl =
       config.baseUrl ||
       process.env.NEXT_PUBLIC_REGISTRY_API_URL ||
-      'https://api.registry.ciris.ai';
+      'https://api.registry.ciris-services-1.ai';
     this.getAuthToken = config.getAuthToken;
     this.timeout = config.timeout || 30000;
     this.clientVersion = config.clientVersion || 'portal-v0.1.0';
