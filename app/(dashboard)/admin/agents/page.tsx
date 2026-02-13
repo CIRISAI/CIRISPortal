@@ -74,6 +74,7 @@ interface AgentRecord {
   identityTemplate?: string;
   stewardshipTier?: number;
   permittedActions?: string[];
+  approvedAdapters?: string[];
   templateHash?: string;
 }
 
@@ -214,75 +215,168 @@ const CAPABILITIES = [
   'CAP_REASONING',
 ];
 
+// The 10 CIRIS action verbs (from CIRISAgent ciris_templates/*.yaml)
+const ALL_ACTIONS = [
+  'SPEAK',
+  'OBSERVE',
+  'MEMORIZE',
+  'RECALL',
+  'DEFER',
+  'REJECT',
+  'PONDER',
+  'TOOL',
+  'FORGET',
+  'TASK_COMPLETE',
+];
+
 // Identity template presets derived from CIRISAgent ciris_templates/*.yaml
 const TEMPLATE_PRESETS: Record<
   string,
-  { label: string; tier: number; actions: string[]; description: string }
+  {
+    label: string;
+    tier: number;
+    actions: string[];
+    adapters: string[];
+    description: string;
+  }
 > = {
   echo: {
     label: 'Echo',
     tier: 4,
-    actions: ['OBSERVE', 'SPEAK', 'MEMORIZE', 'RECALL', 'DEFER', 'REJECT'],
-    description: 'Community helper — observation, speech, and memory',
+    actions: [
+      'SPEAK',
+      'OBSERVE',
+      'MEMORIZE',
+      'DEFER',
+      'TOOL',
+      'PONDER',
+      'RECALL',
+      'FORGET',
+      'TASK_COMPLETE',
+    ],
+    adapters: ['ciris_covenant_metrics', 'session_logs'],
+    description: 'Community moderation agent (Ubuntu philosophy)',
   },
   scout: {
     label: 'Scout',
-    tier: 3,
-    actions: [
-      'OBSERVE',
-      'SPEAK',
-      'MEMORIZE',
-      'RECALL',
-      'TOOL',
-      'DEFER',
-      'REJECT',
-    ],
-    description: 'Research agent — observation with tool access',
+    tier: 2,
+    actions: [...ALL_ACTIONS],
+    adapters: ['ciris_hosted_tools', 'navigation', 'weather'],
+    description: 'Sales and outreach agent',
   },
   sage: {
     label: 'Sage',
-    tier: 2,
-    actions: [
-      'OBSERVE',
-      'SPEAK',
-      'MEMORIZE',
-      'RECALL',
-      'TOOL',
-      'DEFER',
-      'REJECT',
-      'PONDER',
-    ],
-    description: 'Advisory agent — deep reasoning and tool use',
+    tier: 3,
+    actions: [...ALL_ACTIONS],
+    adapters: ['external_data_sql', 'ciris_hosted_tools'],
+    description: 'GDPR compliance automation agent',
   },
   datum: {
     label: 'Datum',
-    tier: 3,
-    actions: ['OBSERVE', 'MEMORIZE', 'RECALL', 'TOOL', 'DEFER', 'REJECT'],
-    description: 'Data processing — structured analysis without speech',
+    tier: 2,
+    actions: [...ALL_ACTIONS],
+    adapters: ['ciris_hosted_tools', 'ciris_covenant_metrics'],
+    description: 'Data measurement and evaluation agent',
   },
   ally: {
     label: 'Ally',
-    tier: 1,
-    actions: [
-      'OBSERVE',
-      'SPEAK',
-      'MEMORIZE',
-      'RECALL',
-      'TOOL',
-      'DEFER',
-      'REJECT',
-      'PONDER',
-      'ACT',
+    tier: 3,
+    actions: [...ALL_ACTIONS],
+    adapters: [
+      'home_assistant',
+      'navigation',
+      'weather',
+      'apple_notes',
+      'apple_reminders',
+      'mcp_client',
     ],
-    description: 'Full autonomy agent — all actions including ACT',
+    description: 'Personal assistant agent',
   },
   default: {
     label: 'Default',
     tier: 4,
-    actions: ['OBSERVE', 'SPEAK', 'MEMORIZE', 'RECALL', 'DEFER', 'REJECT'],
-    description: 'Baseline template — same as Echo',
+    actions: [...ALL_ACTIONS],
+    adapters: ['ciris_hosted_tools'],
+    description: 'Default template — all actions',
   },
 };
+
+// Known adapters from CIRISAgent/ciris_adapters/
+const KNOWN_ADAPTERS: { name: string; category: string }[] = [
+  // Core / Platform
+  { name: 'ciris_hosted_tools', category: 'Core' },
+  { name: 'ciris_covenant_metrics', category: 'Core' },
+  { name: 'ciris_verify', category: 'Core' },
+  { name: 'cirisnode', category: 'Core' },
+  { name: 'session_logs', category: 'Core' },
+  { name: 'model_usage', category: 'Core' },
+  // Communication
+  { name: 'a2a', category: 'Communication' },
+  { name: 'bluebubbles', category: 'Communication' },
+  { name: 'blucli', category: 'Communication' },
+  { name: 'himalaya', category: 'Communication' },
+  { name: 'imsg', category: 'Communication' },
+  { name: 'reddit', category: 'Communication' },
+  { name: 'slack', category: 'Communication' },
+  { name: 'voice_call', category: 'Communication' },
+  // Productivity
+  { name: 'apple_notes', category: 'Productivity' },
+  { name: 'apple_reminders', category: 'Productivity' },
+  { name: 'bear_notes', category: 'Productivity' },
+  { name: 'github', category: 'Productivity' },
+  { name: 'notion', category: 'Productivity' },
+  { name: 'obsidian', category: 'Productivity' },
+  { name: 'things_mac', category: 'Productivity' },
+  { name: 'trello', category: 'Productivity' },
+  // Smart Home / IoT
+  { name: 'home_assistant', category: 'Smart Home' },
+  { name: 'openhue', category: 'Smart Home' },
+  { name: 'sonoscli', category: 'Smart Home' },
+  { name: 'eightctl', category: 'Smart Home' },
+  // Media
+  { name: 'camsnap', category: 'Media' },
+  { name: 'gifgrep', category: 'Media' },
+  { name: 'nano_banana_pro', category: 'Media' },
+  { name: 'nano_pdf', category: 'Media' },
+  { name: 'openai_image_gen', category: 'Media' },
+  { name: 'openai_whisper', category: 'Media' },
+  { name: 'openai_whisper_api', category: 'Media' },
+  { name: 'peekaboo', category: 'Media' },
+  { name: 'sherpa_onnx_tts', category: 'Media' },
+  { name: 'songsee', category: 'Media' },
+  { name: 'spotify_player', category: 'Media' },
+  { name: 'video_frames', category: 'Media' },
+  // Navigation / Location
+  { name: 'navigation', category: 'Location' },
+  { name: 'goplaces', category: 'Location' },
+  { name: 'local_places', category: 'Location' },
+  { name: 'weather', category: 'Location' },
+  // Data / Integration
+  { name: 'external_data_sql', category: 'Data' },
+  { name: 'mcp_client', category: 'Data' },
+  { name: 'mcp_server', category: 'Data' },
+  { name: 'mcp_common', category: 'Data' },
+  { name: 'mcporter', category: 'Data' },
+  { name: 'oracle', category: 'Data' },
+  // Developer
+  { name: 'coding_agent', category: 'Developer' },
+  { name: 'tmux', category: 'Developer' },
+  { name: 'skill_creator', category: 'Developer' },
+  { name: 'wacli', category: 'Developer' },
+  // AI / LLM
+  { name: 'gemini', category: 'AI' },
+  { name: 'clawdhub', category: 'AI' },
+  { name: 'summarize', category: 'AI' },
+  // Other
+  { name: 'blogwatcher', category: 'Other' },
+  { name: 'bird', category: 'Other' },
+  { name: 'gog', category: 'Other' },
+  { name: 'onepassword', category: 'Other' },
+  { name: 'ordercli', category: 'Other' },
+  { name: 'sag', category: 'Other' },
+  { name: 'sample_adapter', category: 'Other' },
+  { name: 'mock_llm', category: 'Other' },
+];
 
 function formatVersion(version?: {
   major: number;
@@ -327,6 +421,7 @@ function RegisterAgentDialog() {
     identityTemplate: '',
     stewardshipTier: 0,
     permittedActions: [] as string[],
+    approvedAdapters: [] as string[],
   });
   const queryClient = useQueryClient();
 
@@ -351,6 +446,10 @@ function RegisterAgentDialog() {
           permittedActions:
             data.permittedActions.length > 0
               ? data.permittedActions
+              : undefined,
+          approvedAdapters:
+            data.approvedAdapters.length > 0
+              ? data.approvedAdapters
               : undefined,
         }),
       });
@@ -395,6 +494,7 @@ function RegisterAgentDialog() {
       identityTemplate: '',
       stewardshipTier: 0,
       permittedActions: [],
+      approvedAdapters: [],
     });
   };
 
@@ -563,6 +663,7 @@ function RegisterAgentDialog() {
                       identityTemplate: value,
                       stewardshipTier: preset.tier,
                       permittedActions: [...preset.actions],
+                      approvedAdapters: [...preset.adapters],
                     });
                   } else {
                     setFormData({
@@ -570,6 +671,7 @@ function RegisterAgentDialog() {
                       identityTemplate: value,
                       stewardshipTier: 0,
                       permittedActions: [],
+                      approvedAdapters: [],
                     });
                   }
                 }}
@@ -655,6 +757,69 @@ function RegisterAgentDialog() {
                   </span>
                 )}
               </div>
+            </div>
+          )}
+
+          {formData.identityTemplate && (
+            <div className="space-y-2">
+              <Label>
+                Approved Adapters
+                {formData.identityTemplate !== 'custom' && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (click to toggle)
+                  </span>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Adapters this agent build is permitted to load at runtime
+              </p>
+              <div className="max-h-48 overflow-y-auto rounded-md border p-3">
+                {Array.from(new Set(KNOWN_ADAPTERS.map((a) => a.category))).map(
+                  (category) => (
+                    <div key={category} className="mb-2">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">
+                        {category}
+                      </p>
+                      <div
+                        className="flex flex-wrap gap-1"
+                        data-testid={`adapter-category-${category.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
+                        {KNOWN_ADAPTERS.filter(
+                          (a) => a.category === category
+                        ).map((adapter) => (
+                          <Badge
+                            key={adapter.name}
+                            variant={
+                              formData.approvedAdapters.includes(adapter.name)
+                                ? 'default'
+                                : 'outline'
+                            }
+                            className="cursor-pointer font-mono text-xs"
+                            data-testid={`adapter-${adapter.name}`}
+                            onClick={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                approvedAdapters:
+                                  prev.approvedAdapters.includes(adapter.name)
+                                    ? prev.approvedAdapters.filter(
+                                        (a) => a !== adapter.name
+                                      )
+                                    : [...prev.approvedAdapters, adapter.name],
+                              }));
+                            }}
+                          >
+                            {adapter.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formData.approvedAdapters.length} adapter
+                {formData.approvedAdapters.length !== 1 ? 's' : ''} selected
+              </p>
             </div>
           )}
         </div>
@@ -1097,6 +1262,24 @@ function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
                   </div>
                 </div>
               )}
+              {agent.approvedAdapters && agent.approvedAdapters.length > 0 && (
+                <div>
+                  <Label className="text-muted-foreground">
+                    Approved Adapters
+                  </Label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {agent.approvedAdapters.map((adapter) => (
+                      <Badge
+                        key={adapter}
+                        variant="outline"
+                        className="font-mono text-xs"
+                      >
+                        {adapter}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1128,6 +1311,7 @@ async function fetchAgents(): Promise<AgentsResponse> {
     identityTemplate: agent.identityTemplate || '',
     stewardshipTier: agent.stewardshipTier || 0,
     permittedActions: agent.permittedActions || [],
+    approvedAdapters: agent.approvedAdapters || [],
   }));
 
   return {
