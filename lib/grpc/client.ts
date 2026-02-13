@@ -3,10 +3,16 @@
  *
  * This client wraps the gRPC connection to the registry server
  * and provides typed methods for Portal operations.
+ *
+ * Authentication: Portal generates short-lived JWTs signed with a shared
+ * secret (REGISTRY_JWT_SECRET) and passes them in gRPC metadata as
+ * Authorization: Bearer <token>. The Registry validates these JWTs using
+ * the same secret.
  */
 
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
+import { SignJWT } from 'jose';
 import path from 'path';
 
 // Load proto definition
@@ -42,20 +48,62 @@ export function getPortalClient(): any {
   return portalClient;
 }
 
+// ============================================================================
+// JWT Authentication for Registry gRPC calls
+// ============================================================================
+
+const REGISTRY_JWT_SECRET =
+  process.env.REGISTRY_JWT_SECRET || process.env.JWT_SECRET || '';
+const REGISTRY_JWT_ISSUER = process.env.REGISTRY_JWT_ISSUER || 'ciris-registry';
+
 /**
- * Promisify a gRPC unary call
+ * Generate a short-lived service JWT for Registry authentication.
+ * The Portal acts as a service account with admin role (role=1).
+ */
+async function generateServiceJWT(): Promise<string> {
+  if (!REGISTRY_JWT_SECRET) {
+    console.warn(
+      '[gRPC] No REGISTRY_JWT_SECRET configured — requests to protected endpoints will fail'
+    );
+    return '';
+  }
+
+  const secret = new TextEncoder().encode(REGISTRY_JWT_SECRET);
+  const token = await new SignJWT({
+    sub: 'portal-service',
+    org_id: 'ciris-internal',
+    role: 1, // SYSTEM_ADMIN — Portal is a trusted service
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setIssuer(REGISTRY_JWT_ISSUER)
+    .setExpirationTime('5m') // Short-lived: 5 minutes
+    .sign(secret);
+
+  return token;
+}
+
+/**
+ * Promisify a gRPC unary call with optional JWT auth metadata
  */
 function promisifyUnary<TReq, TRes>(
   client: any,
   method: string,
-  request: TReq
+  request: TReq,
+  authToken?: string
 ): Promise<TRes> {
   return new Promise((resolve, reject) => {
     const deadline = new Date();
     deadline.setSeconds(deadline.getSeconds() + 30);
 
+    const metadata = new grpc.Metadata();
+    if (authToken) {
+      metadata.set('authorization', `Bearer ${authToken}`);
+    }
+
     client[method](
       request,
+      metadata,
       { deadline },
       (err: Error | null, response: TRes) => {
         if (err) {
@@ -68,6 +116,19 @@ function promisifyUnary<TReq, TRes>(
       }
     );
   });
+}
+
+/**
+ * Promisify a gRPC unary call with automatic JWT authentication.
+ * Use this for PortalService and RegistryAdminService calls.
+ */
+async function promisifyUnaryAuth<TReq, TRes>(
+  client: any,
+  method: string,
+  request: TReq
+): Promise<TRes> {
+  const token = await generateServiceJWT();
+  return promisifyUnary(client, method, request, token);
 }
 
 // ============================================================================
@@ -108,7 +169,7 @@ export async function healthCheck(includeDiagnostics = false): Promise<any> {
 // ============================================================================
 
 export async function getOrganization(orgId: string): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getOrganization', {
+  return promisifyUnaryAuth(getPortalClient(), 'getOrganization', {
     context: buildContext(),
     orgId,
   });
@@ -119,7 +180,7 @@ export async function listOrganizations(params?: {
   pageToken?: string;
   includeInactive?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listOrganizations', {
+  return promisifyUnaryAuth(getPortalClient(), 'listOrganizations', {
     context: buildContext(),
     pageSize: params?.pageSize,
     pageToken: params?.pageToken,
@@ -147,7 +208,7 @@ export async function createOrganization(params: {
     active?: boolean;
   };
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createOrganization', {
+  return promisifyUnaryAuth(getPortalClient(), 'createOrganization', {
     context: buildContext(),
     organization: {
       ...params.organization,
@@ -168,7 +229,7 @@ export async function listOrgUsers(params: {
   pageToken?: string;
   includeInactive?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listOrgUsers', {
+  return promisifyUnaryAuth(getPortalClient(), 'listOrgUsers', {
     context: buildContext(),
     ...params,
   });
@@ -184,7 +245,7 @@ export async function listKeys(params: {
   pageSize?: number;
   pageToken?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listKeys', {
+  return promisifyUnaryAuth(getPortalClient(), 'listKeys', {
     context: buildContext(),
     ...params,
   });
@@ -195,7 +256,7 @@ export async function generateKeyPair(params: {
   requesterUserId: string;
   activateImmediately?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'generateKeyPair', {
+  return promisifyUnaryAuth(getPortalClient(), 'generateKeyPair', {
     context: buildContext(),
     ...params,
   });
@@ -206,7 +267,7 @@ export async function activateKey(params: {
   keyId: string;
   requesterUserId: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'activateKey', {
+  return promisifyUnaryAuth(getPortalClient(), 'activateKey', {
     context: buildContext(),
     ...params,
   });
@@ -219,7 +280,7 @@ export async function rotateKey(params: {
   mode?: number;
   gracePeriodHours?: number;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'rotateKey', {
+  return promisifyUnaryAuth(getPortalClient(), 'rotateKey', {
     context: buildContext(),
     ...params,
   });
@@ -231,7 +292,7 @@ export async function revokeKey(params: {
   requesterUserId: string;
   reason?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'revokeKey', {
+  return promisifyUnaryAuth(getPortalClient(), 'revokeKey', {
     context: buildContext(),
     ...params,
   });
@@ -253,7 +314,7 @@ export async function getAuditLog(params: {
   pageSize?: number;
   pageToken?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getAuditLog', {
+  return promisifyUnaryAuth(getPortalClient(), 'getAuditLog', {
     context: buildContext(),
     ...params,
   });
@@ -268,7 +329,7 @@ export async function exportAuditLog(params: {
   };
   format?: number;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'exportAuditLog', {
+  return promisifyUnaryAuth(getPortalClient(), 'exportAuditLog', {
     context: buildContext(),
     ...params,
   });
@@ -286,7 +347,7 @@ export async function createOrgUser(params: {
     role: string;
   };
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createOrgUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'createOrgUser', {
     context: buildContext(),
     user: params.user,
   });
@@ -296,7 +357,7 @@ export async function getOrgUser(params: {
   orgId: string;
   userId: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getOrgUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'getOrgUser', {
     context: buildContext(),
     ...params,
   });
@@ -306,7 +367,7 @@ export async function getOrgUserByEmail(params: {
   orgId: string;
   email: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getOrgUserByEmail', {
+  return promisifyUnaryAuth(getPortalClient(), 'getOrgUserByEmail', {
     context: buildContext(),
     ...params,
   });
@@ -321,7 +382,7 @@ export async function updateOrgUser(params: {
     active?: boolean;
   };
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'updateOrgUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'updateOrgUser', {
     context: buildContext(),
     user: params.user,
   });
@@ -336,7 +397,7 @@ export async function batchCreateOrgUsers(params: {
   }>;
   mode?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'batchCreateOrgUsers', {
+  return promisifyUnaryAuth(getPortalClient(), 'batchCreateOrgUsers', {
     context: buildContext(),
     ...params,
   });
@@ -352,7 +413,7 @@ export async function requestKeyEscrow(params: {
   escrowType: string;
   requesterUserId: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'requestKeyEscrow', {
+  return promisifyUnaryAuth(getPortalClient(), 'requestKeyEscrow', {
     context: buildContext(),
     ...params,
   });
@@ -363,7 +424,7 @@ export async function listKeyEscrows(params: {
   pageSize?: number;
   pageToken?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listKeyEscrows', {
+  return promisifyUnaryAuth(getPortalClient(), 'listKeyEscrows', {
     context: buildContext(),
     ...params,
   });
@@ -375,7 +436,7 @@ export async function requestKeyRecovery(params: {
   reason: string;
   requesterUserId: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'requestKeyRecovery', {
+  return promisifyUnaryAuth(getPortalClient(), 'requestKeyRecovery', {
     context: buildContext(),
     ...params,
   });
@@ -392,7 +453,7 @@ export async function generateComplianceReport(params: {
   periodEnd?: string;
   sections?: string[];
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'generateComplianceReport', {
+  return promisifyUnaryAuth(getPortalClient(), 'generateComplianceReport', {
     context: buildContext(),
     ...params,
   });
@@ -495,7 +556,7 @@ export async function registerAgent(params: {
   permittedActions?: string[];
   templateHash?: string;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'registerAgent', {
+  return promisifyUnaryAuth(getAdminClient(), 'registerAgent', {
     context: buildContext(),
     agent: {
       agentHash: params.agentHash,
@@ -524,7 +585,7 @@ export async function batchRegisterAgents(params: {
     templateHash?: string;
   }>;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'batchRegisterAgents', {
+  return promisifyUnaryAuth(getAdminClient(), 'batchRegisterAgents', {
     context: buildContext(),
     ...params,
   });
@@ -537,14 +598,14 @@ export async function setEmergencyShutdown(params: {
   durationSeconds?: number;
   allowedOperations?: string[];
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'setEmergencyShutdown', {
+  return promisifyUnaryAuth(getAdminClient(), 'setEmergencyShutdown', {
     context: buildContext(),
     ...params,
   });
 }
 
 export async function clearEmergencyShutdown(): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'clearEmergencyShutdown', {
+  return promisifyUnaryAuth(getAdminClient(), 'clearEmergencyShutdown', {
     context: buildContext(),
   });
 }
@@ -559,7 +620,7 @@ export async function massRevoke(params: {
   severity: string;
   isDryRun?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'massRevoke', {
+  return promisifyUnaryAuth(getAdminClient(), 'massRevoke', {
     context: buildContext(),
     ...params,
   });
@@ -572,7 +633,7 @@ export async function registerWebhook(params: {
   events: string[];
   secret?: string;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'registerWebhook', {
+  return promisifyUnaryAuth(getAdminClient(), 'registerWebhook', {
     context: buildContext(),
     ...params,
   });
@@ -583,7 +644,7 @@ export async function listWebhooks(params: {
   pageSize?: number;
   pageToken?: string;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'listWebhooks', {
+  return promisifyUnaryAuth(getAdminClient(), 'listWebhooks', {
     context: buildContext(),
     ...params,
   });
@@ -593,7 +654,7 @@ export async function deleteWebhook(params: {
   orgId: string;
   webhookId: string;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'deleteWebhook', {
+  return promisifyUnaryAuth(getAdminClient(), 'deleteWebhook', {
     context: buildContext(),
     ...params,
   });
@@ -605,7 +666,7 @@ export async function listExpiringLicenses(params: {
   pageSize?: number;
   pageToken?: string;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'listExpiringLicenses', {
+  return promisifyUnaryAuth(getAdminClient(), 'listExpiringLicenses', {
     context: buildContext(),
     ...params,
   });
@@ -615,7 +676,7 @@ export async function listExpiringLicenses(params: {
 export async function getPartnerActivity(params: {
   partnerId: string;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'getPartnerActivity', {
+  return promisifyUnaryAuth(getAdminClient(), 'getPartnerActivity', {
     context: buildContext(),
     ...params,
   });
@@ -633,7 +694,7 @@ export async function listRegisteredAgents(params: {
   orderBy?: string;
   descending?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getAdminClient(), 'listRegisteredAgents', {
+  return promisifyUnaryAuth(getAdminClient(), 'listRegisteredAgents', {
     context: buildContext(),
     ...params,
   });
@@ -652,7 +713,7 @@ export async function createUser(params: {
   oauthProvider?: string;
   oauthSubject?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'createUser', {
     context: buildContext(),
     user: params,
   });
@@ -667,7 +728,7 @@ export async function createUserWithMembership(params: {
   orgId: string;
   role: string; // OrgRole enum value
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createUserWithMembership', {
+  return promisifyUnaryAuth(getPortalClient(), 'createUserWithMembership', {
     context: buildContext(),
     user: { email: params.email, name: params.name },
     orgId: params.orgId,
@@ -679,7 +740,7 @@ export async function createUserWithMembership(params: {
  * Get user by ID (includes all org memberships)
  */
 export async function getUser(params: { userId: string }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'getUser', {
     context: buildContext(),
     userId: params.userId,
   });
@@ -689,7 +750,7 @@ export async function getUser(params: { userId: string }): Promise<any> {
  * Get user by email (includes all org memberships)
  */
 export async function getUserByEmail(params: { email: string }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getUserByEmail', {
+  return promisifyUnaryAuth(getPortalClient(), 'getUserByEmail', {
     context: buildContext(),
     email: params.email,
   });
@@ -704,7 +765,7 @@ export async function addUserToOrg(params: {
   role: string;
   invitedBy?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'addUserToOrg', {
+  return promisifyUnaryAuth(getPortalClient(), 'addUserToOrg', {
     context: buildContext(),
     ...params,
   });
@@ -717,7 +778,7 @@ export async function removeUserFromOrg(params: {
   userId: string;
   orgId: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'removeUserFromOrg', {
+  return promisifyUnaryAuth(getPortalClient(), 'removeUserFromOrg', {
     context: buildContext(),
     ...params,
   });
@@ -731,7 +792,7 @@ export async function updateUserOrgRole(params: {
   orgId: string;
   newRole: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'updateUserOrgRole', {
+  return promisifyUnaryAuth(getPortalClient(), 'updateUserOrgRole', {
     context: buildContext(),
     ...params,
   });
@@ -746,7 +807,7 @@ export async function listOrgMembers(params: {
   pageToken?: string;
   includeInactive?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listOrgMembers', {
+  return promisifyUnaryAuth(getPortalClient(), 'listOrgMembers', {
     context: buildContext(),
     ...params,
   });
@@ -764,7 +825,7 @@ export async function createSystemUser(params: {
   name: string;
   role: string; // SystemRole enum value
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createSystemUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'createSystemUser', {
     context: buildContext(),
     user: params,
   });
@@ -774,7 +835,7 @@ export async function createSystemUser(params: {
  * Get a system user by ID
  */
 export async function getSystemUser(params: { userId: string }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getSystemUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'getSystemUser', {
     context: buildContext(),
     userId: params.userId,
   });
@@ -788,7 +849,7 @@ export async function listSystemUsers(params?: {
   pageToken?: string;
   includeInactive?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listSystemUsers', {
+  return promisifyUnaryAuth(getPortalClient(), 'listSystemUsers', {
     context: buildContext(),
     ...params,
   });
@@ -803,7 +864,7 @@ export async function updateSystemUser(params: {
   role?: string;
   active?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'updateSystemUser', {
+  return promisifyUnaryAuth(getPortalClient(), 'updateSystemUser', {
     context: buildContext(),
     user: params,
   });
@@ -822,7 +883,7 @@ export async function listChildOrganizations(params: {
   pageToken?: string;
   includeInactive?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'listChildOrganizations', {
+  return promisifyUnaryAuth(getPortalClient(), 'listChildOrganizations', {
     context: buildContext(),
     ...params,
   });
@@ -846,7 +907,7 @@ export async function createLicenseeOrganization(params: {
     active?: boolean;
   };
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createLicenseeOrganization', {
+  return promisifyUnaryAuth(getPortalClient(), 'createLicenseeOrganization', {
     context: buildContext(),
     organization: {
       ...params.organization,
@@ -866,7 +927,7 @@ export async function getOrganizationHierarchy(params: {
   includeAncestors?: boolean;
   includeDescendants?: boolean;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'getOrganizationHierarchy', {
+  return promisifyUnaryAuth(getPortalClient(), 'getOrganizationHierarchy', {
     context: buildContext(),
     ...params,
   });
@@ -879,7 +940,7 @@ export async function upgradeToPartner(params: {
   orgId: string;
   partnerLicenseType?: string;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'upgradeToPartner', {
+  return promisifyUnaryAuth(getPortalClient(), 'upgradeToPartner', {
     context: buildContext(),
     ...params,
   });
@@ -903,7 +964,7 @@ export async function createAuditEntry(params: {
   description?: string;
   metadata?: Record<string, string>;
 }): Promise<any> {
-  return promisifyUnary(getPortalClient(), 'createAuditEntry', {
+  return promisifyUnaryAuth(getPortalClient(), 'createAuditEntry', {
     context: buildContext(),
     action: params.action,
     actorUserId: params.actorUserId,
