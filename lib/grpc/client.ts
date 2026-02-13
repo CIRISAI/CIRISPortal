@@ -18,6 +18,32 @@ import path from 'path';
 // Load proto definition
 const PROTO_PATH = path.join(process.cwd(), 'lib/grpc/ciris_registry.proto');
 
+// Proto enum → integer mappings for reliable serialization.
+// Proto-loader's `enums: String` only affects deserialization (incoming);
+// for outgoing data, explicitly map to integers to avoid silent defaults to 0.
+const AGENT_TYPE_INT: Record<string, number> = {
+  AGENT_TYPE_UNSPECIFIED: 0,
+  CIRISCARE: 1,
+  CIRISMEDICAL: 2,
+  CIRISLEGAL: 3,
+  CIRISFINANCIAL: 4,
+  CUSTOM: 99,
+};
+
+const AUTONOMY_TIER_INT: Record<string, number> = {
+  AUTONOMY_TIER_UNSPECIFIED: 0,
+  A0_ADVISORY: 1,
+  A1_LIMITED: 2,
+  A2_MODERATE: 3,
+  A3_HIGH: 4,
+  A4_CRITICAL: 5,
+};
+
+/** Convert hex string to Buffer for proto `bytes` fields. */
+function hexToBytes(hex: string): Buffer {
+  return Buffer.from(hex, 'hex');
+}
+
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: false, // Convert to camelCase
   longs: String,
@@ -487,7 +513,7 @@ export async function lookupAgent(params: { agentHash: string }): Promise<any> {
   // Use authenticated call to get full (non-redacted) agent record
   return promisifyUnaryAuth(getRegistryClient(), 'lookupAgent', {
     context: buildContext(),
-    ...params,
+    agentHash: hexToBytes(params.agentHash),
   });
 }
 
@@ -563,15 +589,20 @@ export async function registerAgent(params: {
   return promisifyUnaryAuth(getAdminClient(), 'registerAgent', {
     context: buildContext(),
     agent: {
-      agentHash: params.agentHash,
-      agentType: params.agentType,
+      agentHash: hexToBytes(params.agentHash),
+      agentHashHex: params.agentHash,
+      agentType: AGENT_TYPE_INT[params.agentType] ?? params.agentType,
       version: params.version,
-      capabilities: params.capabilities,
-      maxAutonomyTier: params.maxAutonomyTier,
+      baseCapabilities: params.capabilities,
+      maxAutonomyTier: params.maxAutonomyTier
+        ? (AUTONOMY_TIER_INT[params.maxAutonomyTier] ?? params.maxAutonomyTier)
+        : undefined,
       identityTemplate: params.identityTemplate,
       stewardshipTier: params.stewardshipTier,
       permittedActions: params.permittedActions,
-      templateHash: params.templateHash,
+      templateHash: params.templateHash
+        ? hexToBytes(params.templateHash)
+        : undefined,
       approvedAdapters: params.approvedAdapters,
       orgId: params.orgId,
     },
