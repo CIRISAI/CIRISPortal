@@ -230,6 +230,29 @@ This portal operates under the CIRIS Covenant. Key principles:
 - **Fail-Secure** - Unknown users have no access; errors deny rather than allow
 - **Minimal Data** - Store only what's needed for key custody and audit
 
+## E2E QA Notes (2026-02-13)
+
+### Agent Registration Flow
+
+Portal is the interface to CIRISRegistry for agent registration and key generation.
+
+**Critical architecture**: Signing keys MUST be generated here (Portal → Registry). Agents receive their signing key at install time. CIRISNode verifies all agent signatures against Registry — self-generated keys won't work.
+
+### Known Issues
+
+1. **Agent registration field mapping (BUG-002)**: Agent type, version, and template values may not map correctly through the gRPC client. The protobuf enum fields (`agentType`, `maxAutonomyTier`) are sent as strings but may not serialize to the correct enum integer values. Needs investigation in `lib/grpc/client.ts` → `registerAgent()`.
+
+2. **data-testid coverage**: Registration dialog has good coverage (`register-agent-btn`, `input-agent-hash`, `select-agent-type`, `select-autonomy-tier`, `select-identity-template`). Agent list table and key management pages need data-testid attributes for E2E automation.
+
+3. **No Playwright tests yet**: E2E tests should be added in an `e2e/` directory covering agent registration and key generation flows.
+
+### Separation from ethicsengine-portal
+
+- **CIRISPortal** (portal.ciris.ai): Agent registry, key custody, partner management → talks to CIRISRegistry (gRPC)
+- **ethicsengine-portal** (portal.ethicsengine.org): Customer billing, analytics → talks to ethicsengine-portal-api → Stripe + CIRISNode
+
+These are completely separate products. Do not confuse them.
+
 ## Issue Reporting
 
 When encountering bugs or issues with the portal, **do not attempt to fix CIRISRegistry issues from here**. Instead:
