@@ -417,12 +417,12 @@ function RegisterAgentDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button data-testid="register-agent-btn">
           <Plus className="mr-2 h-4 w-4" />
           Register Agent
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" data-testid="register-agent-dialog">
         <DialogHeader>
           <DialogTitle>Register New Agent</DialogTitle>
           <DialogDescription>
@@ -434,6 +434,7 @@ function RegisterAgentDialog() {
             <Label htmlFor="agentHash">Agent Hash (SHA-256)</Label>
             <Input
               id="agentHash"
+              data-testid="input-agent-hash"
               placeholder="64-character hex hash"
               value={formData.agentHash}
               onChange={(e) =>
@@ -457,7 +458,7 @@ function RegisterAgentDialog() {
                   setFormData({ ...formData, agentType: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-agent-type">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -478,7 +479,7 @@ function RegisterAgentDialog() {
                   setFormData({ ...formData, maxAutonomyTier: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-autonomy-tier">
                   <SelectValue placeholder="Select tier" />
                 </SelectTrigger>
                 <SelectContent>
@@ -498,6 +499,7 @@ function RegisterAgentDialog() {
               <Input
                 type="number"
                 min="0"
+                data-testid="input-version-major"
                 value={formData.versionMajor}
                 onChange={(e) =>
                   setFormData({ ...formData, versionMajor: e.target.value })
@@ -508,6 +510,7 @@ function RegisterAgentDialog() {
               <Input
                 type="number"
                 min="0"
+                data-testid="input-version-minor"
                 value={formData.versionMinor}
                 onChange={(e) =>
                   setFormData({ ...formData, versionMinor: e.target.value })
@@ -518,6 +521,7 @@ function RegisterAgentDialog() {
               <Input
                 type="number"
                 min="0"
+                data-testid="input-version-patch"
                 value={formData.versionPatch}
                 onChange={(e) =>
                   setFormData({ ...formData, versionPatch: e.target.value })
@@ -533,6 +537,7 @@ function RegisterAgentDialog() {
               {CAPABILITIES.map((cap) => (
                 <Badge
                   key={cap}
+                  data-testid={`cap-${cap.replace('CAP_', '').toLowerCase()}`}
                   variant={
                     formData.capabilities.includes(cap) ? 'default' : 'outline'
                   }
@@ -569,7 +574,7 @@ function RegisterAgentDialog() {
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-identity-template">
                   <SelectValue placeholder="Select template (optional)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -596,7 +601,7 @@ function RegisterAgentDialog() {
                   }
                   disabled={formData.identityTemplate !== 'custom'}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-stewardship-tier">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -630,12 +635,16 @@ function RegisterAgentDialog() {
                 {TEMPLATE_PRESETS[formData.identityTemplate]?.description ||
                   'Custom template configuration'}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div
+                className="flex flex-wrap gap-2"
+                data-testid="permitted-actions"
+              >
                 {formData.permittedActions.map((action) => (
                   <Badge
                     key={action}
                     variant="secondary"
                     className="font-mono text-xs"
+                    data-testid={`action-${action.toLowerCase()}`}
                   >
                     {action}
                   </Badge>
@@ -650,12 +659,17 @@ function RegisterAgentDialog() {
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            data-testid="register-cancel-btn"
+          >
             Cancel
           </Button>
           <Button
             onClick={() => registerMutation.mutate(formData)}
             disabled={!isFormValid || registerMutation.isPending}
+            data-testid="register-submit-btn"
           >
             {registerMutation.isPending ? (
               <>
@@ -752,7 +766,7 @@ function BatchRegisterDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant="outline" data-testid="batch-register-btn">
           <Upload className="mr-2 h-4 w-4" />
           Batch Register
         </Button>
@@ -1266,6 +1280,7 @@ export default function AdminAgentsPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 font-mono"
+                  data-testid="search-agents"
                 />
               </div>
             </div>
@@ -1297,7 +1312,12 @@ export default function AdminAgentsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="icon" onClick={() => refetch()}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => refetch()}
+              data-testid="refresh-agents-btn"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
