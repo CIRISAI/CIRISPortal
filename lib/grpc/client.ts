@@ -484,14 +484,16 @@ export async function getEmergencyStatus(): Promise<any> {
 }
 
 export async function lookupAgent(params: { agentHash: string }): Promise<any> {
-  return promisifyUnary(getRegistryClient(), 'lookupAgent', {
+  // Use authenticated call to get full (non-redacted) agent record
+  return promisifyUnaryAuth(getRegistryClient(), 'lookupAgent', {
     context: buildContext(),
     ...params,
   });
 }
 
 export async function lookupPartner(params: { orgId: string }): Promise<any> {
-  return promisifyUnary(getRegistryClient(), 'lookupPartner', {
+  // Use authenticated call to get full partner record
+  return promisifyUnaryAuth(getRegistryClient(), 'lookupPartner', {
     context: buildContext(),
     partnerId: params.orgId, // Proto expects partner_id, not org_id
   });
@@ -555,6 +557,8 @@ export async function registerAgent(params: {
   stewardshipTier?: number;
   permittedActions?: string[];
   templateHash?: string;
+  approvedAdapters?: string[];
+  orgId?: string;
 }): Promise<any> {
   return promisifyUnaryAuth(getAdminClient(), 'registerAgent', {
     context: buildContext(),
@@ -568,6 +572,8 @@ export async function registerAgent(params: {
       stewardshipTier: params.stewardshipTier,
       permittedActions: params.permittedActions,
       templateHash: params.templateHash,
+      approvedAdapters: params.approvedAdapters,
+      orgId: params.orgId,
     },
   });
 }

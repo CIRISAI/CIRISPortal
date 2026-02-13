@@ -128,6 +128,8 @@ export async function POST(request: Request) {
       identityTemplate,
       stewardshipTier,
       permittedActions,
+      approvedAdapters,
+      orgId,
     } = body;
 
     if (!agentHash || !agentType || !version || !capabilities) {
@@ -149,6 +151,8 @@ export async function POST(request: Request) {
       identityTemplate,
       stewardshipTier,
       permittedActions,
+      approvedAdapters,
+      orgId,
     });
 
     return NextResponse.json({

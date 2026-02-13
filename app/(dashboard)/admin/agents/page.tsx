@@ -125,18 +125,28 @@ interface AgentsResponse {
 function ErrorBanner({
   error,
   onRetry,
+  testId = 'error-banner',
 }: {
   error: string;
   onRetry?: () => void;
+  testId?: string;
 }) {
   return (
-    <Card className="border-red-300 bg-red-50">
+    <Card className="border-red-300 bg-red-50" data-testid={testId}>
       <CardContent className="pt-6">
         <div className="flex items-start gap-4">
           <AlertOctagon className="h-6 w-6 flex-shrink-0 text-red-600" />
           <div className="flex-1">
-            <h3 className="font-semibold text-red-800">API Error</h3>
-            <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-red-700">
+            <h3
+              className="font-semibold text-red-800"
+              data-testid={`${testId}-title`}
+            >
+              API Error
+            </h3>
+            <p
+              className="mt-1 whitespace-pre-wrap font-mono text-sm text-red-700"
+              data-testid={`${testId}-message`}
+            >
               {error}
             </p>
             <p className="mt-2 text-xs text-red-600">
@@ -149,6 +159,7 @@ function ErrorBanner({
               size="sm"
               onClick={onRetry}
               className="border-red-300"
+              data-testid={`${testId}-retry`}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Retry
@@ -427,39 +438,47 @@ function RegisterAgentDialog() {
   });
   const queryClient = useQueryClient();
 
+  const [registrationError, setRegistrationError] = useState<string | null>(
+    null
+  );
+
   const registerMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      setRegistrationError(null);
       console.log('[RegisterAgent] Sending request:', data);
+      const payload = {
+        agentHash: data.agentHash,
+        agentType: data.agentType,
+        version: {
+          major: parseInt(data.versionMajor),
+          minor: parseInt(data.versionMinor),
+          patch: parseInt(data.versionPatch),
+        },
+        capabilities: data.capabilities,
+        maxAutonomyTier: data.maxAutonomyTier,
+        identityTemplate: data.identityTemplate || undefined,
+        stewardshipTier: data.stewardshipTier || undefined,
+        permittedActions:
+          data.permittedActions.length > 0 ? data.permittedActions : undefined,
+        approvedAdapters:
+          data.approvedAdapters.length > 0 ? data.approvedAdapters : undefined,
+      };
+      console.log('[RegisterAgent] Payload:', JSON.stringify(payload));
       const response = await fetch('/api/admin/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentHash: data.agentHash,
-          agentType: data.agentType,
-          version: {
-            major: parseInt(data.versionMajor),
-            minor: parseInt(data.versionMinor),
-            patch: parseInt(data.versionPatch),
-          },
-          capabilities: data.capabilities,
-          maxAutonomyTier: data.maxAutonomyTier,
-          identityTemplate: data.identityTemplate || undefined,
-          stewardshipTier: data.stewardshipTier || undefined,
-          permittedActions:
-            data.permittedActions.length > 0
-              ? data.permittedActions
-              : undefined,
-          approvedAdapters:
-            data.approvedAdapters.length > 0
-              ? data.approvedAdapters
-              : undefined,
-        }),
+        body: JSON.stringify(payload),
       });
       const result = await response.json();
       console.log('[RegisterAgent] Response:', response.status, result);
       if (!response.ok) {
+        const errMsg =
+          result.error || `Registration failed with status ${response.status}`;
+        throw new Error(errMsg);
+      }
+      if (!result.success) {
         throw new Error(
-          result.error || `Registration failed: ${response.status}`
+          result.error || 'Registration returned without success flag'
         );
       }
       return result;
@@ -471,11 +490,13 @@ function RegisterAgentDialog() {
         description: 'Agent registered successfully',
         variant: 'success',
       });
+      setRegistrationError(null);
       setOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
       console.error('[RegisterAgent] Error:', error);
+      setRegistrationError(error.message);
       toast({
         title: 'Registration Failed',
         description: error.message,
@@ -517,7 +538,13 @@ function RegisterAgentDialog() {
     formData.maxAutonomyTier;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setRegistrationError(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button data-testid="register-agent-btn">
           <Plus className="mr-2 h-4 w-4" />
@@ -825,6 +852,39 @@ function RegisterAgentDialog() {
             </div>
           )}
         </div>
+        {/* Inline error display */}
+        {registrationError && (
+          <div
+            className="flex items-start gap-3 rounded-md border border-red-300 bg-red-50 p-3"
+            data-testid="register-error"
+          >
+            <AlertOctagon className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+            <div className="flex-1">
+              <p
+                className="text-sm font-medium text-red-800"
+                data-testid="register-error-title"
+              >
+                Registration Failed
+              </p>
+              <p
+                className="mt-1 whitespace-pre-wrap font-mono text-xs text-red-700"
+                data-testid="register-error-message"
+              >
+                {registrationError}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+              onClick={() => setRegistrationError(null)}
+              data-testid="register-error-dismiss"
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         <DialogFooter>
           <Button
             variant="outline"
@@ -1362,11 +1422,13 @@ export default function AdminAgentsPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" data-testid="agents-page">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Agent Registry</h1>
+          <h1 className="text-2xl font-bold" data-testid="agents-page-title">
+            Agent Registry
+          </h1>
           <p className="text-muted-foreground">
             Manage registered agent builds and attestations
           </p>
