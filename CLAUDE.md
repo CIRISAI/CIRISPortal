@@ -240,11 +240,15 @@ Portal is the interface to CIRISRegistry for agent registration and key generati
 
 ### Known Issues
 
-1. **Agent registration field mapping (BUG-002)**: Agent type, version, and template values may not map correctly through the gRPC client. The protobuf enum fields (`agentType`, `maxAutonomyTier`) are sent as strings but may not serialize to the correct enum integer values. Needs investigation in `lib/grpc/client.ts` → `registerAgent()`.
+1. **Agent registration field mapping (BUG-002, FIXED)**: Proto enum names were mismatched (`AGENT_TYPE_CIRIS_CORE` vs `CIRISCARE`). Fixed in commit `159d57f` — Portal form now uses correct proto enum names for agent types, autonomy tiers, and status values.
 
-2. **data-testid coverage**: Registration dialog has good coverage (`register-agent-btn`, `input-agent-hash`, `select-agent-type`, `select-autonomy-tier`, `select-identity-template`). Agent list table and key management pages need data-testid attributes for E2E automation.
+2. **Keys page 401 (BUG-003, FIXED)**: SDK client fell back to direct Registry HTTP URL (requiring JWT auth the browser can't provide). Fixed in commit `159d57f` — SDK client defaults to Portal's API proxy route (`/api/registry`).
 
-3. **No Playwright tests yet**: E2E tests should be added in an `e2e/` directory covering agent registration and key generation flows.
+3. **Private key export gap (OPEN)**: `generateKeyPair()` in Registry's `portal.rs` generates Ed25519 + ML-DSA-65 keys but only stores the public key in PostgreSQL. The private key is dropped when the function returns. **No private key download/export mechanism exists**. Agents currently need locally-generated keys placed in `data/agent_signing.key` as a workaround.
+
+4. **data-testid coverage**: Registration dialog has good coverage (`register-agent-btn`, `input-agent-hash`, `select-agent-type`, `select-autonomy-tier`, `select-identity-template`). Agent list table and key management pages need data-testid attributes for E2E automation.
+
+5. **No Playwright tests yet**: E2E tests should be added in an `e2e/` directory covering agent registration and key generation flows.
 
 ### Separation from ethicsengine-portal
 
