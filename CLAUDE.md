@@ -244,7 +244,7 @@ Portal is the interface to CIRISRegistry for agent registration and key generati
 
 2. **Keys page 401 (BUG-003, FIXED)**: SDK client fell back to direct Registry HTTP URL (requiring JWT auth the browser can't provide). Fixed in commit `159d57f` — SDK client defaults to Portal's API proxy route (`/api/registry`).
 
-3. **Private key export gap (OPEN)**: `generateKeyPair()` in Registry's `portal.rs` generates Ed25519 + ML-DSA-65 keys but only stores the public key in PostgreSQL. The private key is dropped when the function returns. **No private key download/export mechanism exists**. Agents currently need locally-generated keys placed in `data/agent_signing.key` as a workaround.
+3. **Private key export gap (FIXED)**: Registry now returns the Ed25519 private key in `GenerateKeyPairResponse.ed25519_private_key`. Portal shows a one-time download dialog (`PrivateKeyDownloadDialog`) after key generation — downloads raw 32-byte binary as `agent_signing.key`. Private key is never stored; shown once then cleared from state.
 
 4. **data-testid coverage**: Registration dialog has good coverage (`register-agent-btn`, `input-agent-hash`, `select-agent-type`, `select-autonomy-tier`, `select-identity-template`). Agent list table and key management pages need data-testid attributes for E2E automation.
 

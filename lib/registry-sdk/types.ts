@@ -724,6 +724,15 @@ export interface GenerateKeyPairRequest {
 }
 
 /**
+ * Response from key pair generation, includes one-time private key
+ */
+export interface GenerateKeyPairResponse {
+  keyRecord: PartnerKeyRecord;
+  /** Base64-encoded Ed25519 private key (32 bytes). Returned ONCE, never stored. */
+  ed25519PrivateKey?: string;
+}
+
+/**
  * Rotate key request
  */
 export interface RotateKeyRequest {

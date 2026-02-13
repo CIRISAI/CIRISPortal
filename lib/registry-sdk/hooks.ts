@@ -42,6 +42,7 @@ import type {
   CreateOrgUserRequest,
   UpdateOrgUserRequest,
   GenerateKeyPairRequest,
+  GenerateKeyPairResponse,
   RotateKeyRequest,
   RevokeKeyRequest,
   RequestKeyEscrowRequest,
@@ -559,14 +560,22 @@ export function useKey(
  */
 export function useGenerateKeyPair(
   options?: Omit<
-    UseMutationOptions<PartnerKeyRecord, RegistryError, GenerateKeyPairRequest>,
+    UseMutationOptions<
+      GenerateKeyPairResponse,
+      RegistryError,
+      GenerateKeyPairRequest
+    >,
     'mutationFn'
   >
 ) {
   const client = useRegistryClient();
   const queryClient = useQueryClient();
 
-  return useMutation<PartnerKeyRecord, RegistryError, GenerateKeyPairRequest>({
+  return useMutation<
+    GenerateKeyPairResponse,
+    RegistryError,
+    GenerateKeyPairRequest
+  >({
     mutationFn: (data) => client.generateKeyPair(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({

@@ -97,13 +97,26 @@ export async function POST(request: Request) {
 
     let response;
     switch (action) {
-      case 'generate':
-        response = await generateKeyPair({
+      case 'generate': {
+        const genResponse = await generateKeyPair({
           orgId: params.org_id,
           requesterUserId: params.requester_user_id,
           activateImmediately: params.activate_immediately,
         });
+        // Include the one-time private key (base64) in the response
+        const privateKeyBytes =
+          genResponse.ed25519PrivateKey || genResponse.ed25519_private_key;
+        response = {
+          ...genResponse,
+          ed25519PrivateKey: privateKeyBytes
+            ? bufferToBase64(privateKeyBytes)
+            : undefined,
+          keyRecord: transformKeyRecord(
+            genResponse.keyRecord || genResponse.key_record
+          ),
+        };
         break;
+      }
 
       case 'activate':
         response = await activateKey({

@@ -1608,14 +1608,14 @@ message VerifyDeploymentResponse {
 
   int64 query_timestamp = 30;
   HybridSignature response_signature = 31;
-  ErrorDetail error = 40;
 
   // Identity template enforcement (CIRISVerify, v1.2.0)
-  string identity_template = 60;      // Effective template for this deployment
-  repeated string permitted_actions = 61;  // Effective permitted actions
-  int32 stewardship_tier = 62;        // Effective stewardship tier
+  string identity_template = 40;      // Effective template for this deployment
+  repeated string permitted_actions = 41;  // Effective permitted actions
+  int32 stewardship_tier = 42;        // Effective stewardship tier
 
-  ResponseContext context = 50;
+  ErrorDetail error = 50;
+  ResponseContext context = 60;
 }
 
 // ============================================================================
@@ -1953,12 +1953,14 @@ message GenerateKeyPairRequest {
 
 message GenerateKeyPairResponse {
   PartnerKeyRecord key_record = 1;
+  bytes ed25519_private_key = 2;    // Returned ONCE at generation, never stored in Registry
   ResponseContext context = 50;
 }
 
 message GetPublicKeysRequest {
   string org_id = 1;
   string key_id = 2;
+  string ed25519_fingerprint = 3;   // SHA-256 hex of Ed25519 public key — lookup by fingerprint
   RequestContext context = 10;
 }
 
@@ -1967,6 +1969,7 @@ message GetPublicKeysResponse {
   string key_id = 2;
   KeyStatus status = 3;
   bool found = 4;
+  string org_id = 5;                // Organization that owns this key
   ErrorDetail error = 40;
   ResponseContext context = 50;
 }

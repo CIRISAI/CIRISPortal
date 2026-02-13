@@ -563,6 +563,124 @@ function GenerateKeyDialog({
 }
 
 /**
+ * One-time private key download dialog
+ */
+function PrivateKeyDownloadDialog({
+  data,
+  onClose,
+}: {
+  data: {
+    privateKey: string;
+    keyId: string;
+    orgId: string;
+    fingerprint: string;
+  } | null;
+  onClose: () => void;
+}) {
+  const [downloaded, setDownloaded] = useState(false);
+
+  if (!data) return null;
+
+  const handleDownload = () => {
+    // Decode base64 to raw 32-byte binary
+    const binaryString = atob(data.privateKey);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'agent_signing.key';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setDownloaded(true);
+  };
+
+  const handleClose = () => {
+    setDownloaded(false);
+    onClose();
+  };
+
+  return (
+    <Dialog open={!!data} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-5 w-5" />
+            Save Your Private Key
+          </DialogTitle>
+          <DialogDescription className="font-medium text-amber-700">
+            This private key is shown only once and cannot be retrieved later.
+            Download it now and store it securely.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Key ID:</span>{' '}
+              <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                {data.keyId}
+              </code>
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Organization:</span>{' '}
+              <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                {data.orgId}
+              </code>
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Fingerprint:</span>{' '}
+              <code className="break-all rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                {data.fingerprint}
+              </code>
+            </div>
+          </div>
+          <div className="space-y-2 rounded-lg border bg-gray-50 p-4 text-sm text-gray-600">
+            <p className="font-medium">After downloading:</p>
+            <ol className="list-inside list-decimal space-y-1 text-xs">
+              <li>
+                Place the file at{' '}
+                <code className="rounded bg-gray-100 px-1 py-0.5">
+                  data/agent_signing.key
+                </code>{' '}
+                in your agent directory
+              </li>
+              <li>The agent will auto-register with CIRISNode at startup</li>
+              <li>
+                CIRISNode will cross-validate against Registry automatically
+              </li>
+            </ol>
+          </div>
+        </div>
+        <DialogFooter className="flex gap-2">
+          <Button
+            variant="default"
+            className={
+              downloaded
+                ? 'bg-green-600 hover:bg-green-700'
+                : 'bg-amber-600 hover:bg-amber-700'
+            }
+            onClick={handleDownload}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {downloaded
+              ? 'Downloaded — Download Again'
+              : 'Download agent_signing.key'}
+          </Button>
+          <Button variant="outline" onClick={handleClose}>
+            {downloaded ? "I've Saved My Key" : 'Close Without Saving'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
  * Rotation mode configuration
  */
 const rotationModeConfig: Record<
@@ -1038,6 +1156,12 @@ export default function KeysPage() {
   const [rotateResult, setRotateResult] = useState<RotateKeyResponse | null>(
     null
   );
+  const [privateKeyData, setPrivateKeyData] = useState<{
+    privateKey: string;
+    keyId: string;
+    orgId: string;
+    fingerprint: string;
+  } | null>(null);
 
   // Fetch keys
   const {
@@ -1049,9 +1173,18 @@ export default function KeysPage() {
 
   // Mutations
   const generateMutation = useGenerateKeyPair({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setGenerateDialogOpen(false);
       refetch();
+      // Show one-time private key download if returned
+      if (data.ed25519PrivateKey) {
+        setPrivateKeyData({
+          privateKey: data.ed25519PrivateKey,
+          keyId: data.keyRecord?.keyId || '',
+          orgId: data.keyRecord?.orgId || orgId || '',
+          fingerprint: data.keyRecord?.ed25519Fingerprint || '',
+        });
+      }
     },
   });
 
@@ -1222,6 +1355,12 @@ export default function KeysPage() {
         onOpenChange={setGenerateDialogOpen}
         onGenerate={handleGenerateKey}
         isPending={generateMutation.isPending}
+      />
+
+      {/* Private Key Download Dialog (one-time) */}
+      <PrivateKeyDownloadDialog
+        data={privateKeyData}
+        onClose={() => setPrivateKeyData(null)}
       />
 
       {/* Rotate Dialog */}

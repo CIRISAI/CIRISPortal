@@ -26,6 +26,7 @@ import type {
   CreateOrgUserRequest,
   UpdateOrgUserRequest,
   GenerateKeyPairRequest,
+  GenerateKeyPairResponse,
   RotateKeyRequest,
   RevokeKeyRequest,
   RequestKeyEscrowRequest,
@@ -821,8 +822,11 @@ export class RegistryClient {
    */
   async generateKeyPair(
     data: GenerateKeyPairRequest
-  ): Promise<PartnerKeyRecord> {
-    const response = await this.request<{ keyRecord: PartnerKeyRecord }>(
+  ): Promise<GenerateKeyPairResponse> {
+    const response = await this.request<{
+      keyRecord: PartnerKeyRecord;
+      ed25519PrivateKey?: string;
+    }>(
       'POST',
       '/keys',
       {
@@ -833,7 +837,10 @@ export class RegistryClient {
       },
       'generateKeyPair'
     );
-    return response.keyRecord;
+    return {
+      keyRecord: response.keyRecord,
+      ed25519PrivateKey: response.ed25519PrivateKey,
+    };
   }
 
   /**
