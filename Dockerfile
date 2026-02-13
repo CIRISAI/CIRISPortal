@@ -21,6 +21,7 @@ COPY . .
 # Set environment for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_REGISTRY_API_URL=/api/registry
 
 # Build the application
 RUN npm run build

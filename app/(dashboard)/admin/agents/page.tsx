@@ -162,34 +162,36 @@ function ErrorBanner({
 
 // Agent types and status mappings
 const AGENT_TYPES: Record<string, string> = {
-  AGENT_TYPE_CIRIS_CORE: 'CIRIS Core',
-  AGENT_TYPE_CIRIS_LITE: 'CIRIS Lite',
-  AGENT_TYPE_PARTNER: 'Partner Agent',
-  AGENT_TYPE_CUSTOM: 'Custom Agent',
+  CIRISCARE: 'CIRIS Care',
+  CIRISMEDICAL: 'CIRIS Medical',
+  CIRISLEGAL: 'CIRIS Legal',
+  CIRISFINANCIAL: 'CIRIS Financial',
+  CUSTOM: 'Custom Agent',
 };
 
 const AGENT_TYPES_OPTIONS = [
-  { value: 'AGENT_TYPE_CIRIS_CORE', label: 'CIRIS Core' },
-  { value: 'AGENT_TYPE_CIRIS_LITE', label: 'CIRIS Lite' },
-  { value: 'AGENT_TYPE_PARTNER', label: 'Partner Agent' },
-  { value: 'AGENT_TYPE_CUSTOM', label: 'Custom Agent' },
+  { value: 'CIRISCARE', label: 'CIRIS Care' },
+  { value: 'CIRISMEDICAL', label: 'CIRIS Medical' },
+  { value: 'CIRISLEGAL', label: 'CIRIS Legal' },
+  { value: 'CIRISFINANCIAL', label: 'CIRIS Financial' },
+  { value: 'CUSTOM', label: 'Custom Agent' },
 ];
 
 const STATUS_CONFIG: Record<
   string,
   { label: string; color: string; bgColor: string }
 > = {
-  AGENT_STATUS_REGISTERED: {
-    label: 'Registered',
+  AGENT_ACTIVE: {
+    label: 'Active',
     color: 'text-green-700',
     bgColor: 'bg-green-100',
   },
-  AGENT_STATUS_DEPRECATED: {
+  AGENT_DEPRECATED: {
     label: 'Deprecated',
     color: 'text-yellow-700',
     bgColor: 'bg-yellow-100',
   },
-  AGENT_STATUS_REVOKED: {
+  AGENT_REVOKED: {
     label: 'Revoked',
     color: 'text-red-700',
     bgColor: 'bg-red-100',
@@ -197,11 +199,11 @@ const STATUS_CONFIG: Record<
 };
 
 const AUTONOMY_TIERS = [
-  { value: 'AUTONOMY_TIER_A0', label: 'A0 - Human-in-the-loop' },
-  { value: 'AUTONOMY_TIER_A1', label: 'A1 - Supervised Autonomy' },
-  { value: 'AUTONOMY_TIER_A2', label: 'A2 - Conditional Autonomy' },
-  { value: 'AUTONOMY_TIER_A3', label: 'A3 - High Autonomy' },
-  { value: 'AUTONOMY_TIER_A4', label: 'A4 - Full Autonomy' },
+  { value: 'A0_ADVISORY', label: 'A0 - Advisory' },
+  { value: 'A1_LIMITED', label: 'A1 - Limited' },
+  { value: 'A2_MODERATE', label: 'A2 - Moderate' },
+  { value: 'A3_HIGH', label: 'A3 - High Autonomy' },
+  { value: 'A4_CRITICAL', label: 'A4 - Critical' },
 ];
 
 const CAPABILITIES = [
@@ -395,7 +397,7 @@ function truncateHash(hash: string, length = 16) {
 
 function StatusBadge({ status }: { status: string }) {
   const config = STATUS_CONFIG[status] || {
-    label: status?.replace('AGENT_STATUS_', '') || 'Unknown',
+    label: status?.replace('AGENT_', '') || 'Unknown',
     color: 'text-gray-700',
     bgColor: 'bg-gray-100',
   };
@@ -1306,7 +1308,7 @@ async function fetchAgents(): Promise<AgentsResponse> {
   const agents = (data.agents || []).map((agent: any) => ({
     ...agent,
     agentHash: getAgentHashHex(agent),
-    status: agent.status || 'AGENT_STATUS_REGISTERED',
+    status: agent.status || 'AGENT_ACTIVE',
     capabilities: agent.capabilities || agent.baseCapabilities || [],
     identityTemplate: agent.identityTemplate || '',
     stewardshipTier: agent.stewardshipTier || 0,
@@ -1353,12 +1355,9 @@ export default function AdminAgentsPage() {
   // Calculate stats from real data
   const allAgents = data?.agents || [];
   const stats = data?.stats || {
-    registered: allAgents.filter((a) => a.status === 'AGENT_STATUS_REGISTERED')
-      .length,
-    deprecated: allAgents.filter((a) => a.status === 'AGENT_STATUS_DEPRECATED')
-      .length,
-    revoked: allAgents.filter((a) => a.status === 'AGENT_STATUS_REVOKED')
-      .length,
+    registered: allAgents.filter((a) => a.status === 'AGENT_ACTIVE').length,
+    deprecated: allAgents.filter((a) => a.status === 'AGENT_DEPRECATED').length,
+    revoked: allAgents.filter((a) => a.status === 'AGENT_REVOKED').length,
     attested: allAgents.filter((a) => a.hasAttestation).length,
   };
 
@@ -1474,13 +1473,9 @@ export default function AdminAgentsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="AGENT_STATUS_REGISTERED">
-                  Registered
-                </SelectItem>
-                <SelectItem value="AGENT_STATUS_DEPRECATED">
-                  Deprecated
-                </SelectItem>
-                <SelectItem value="AGENT_STATUS_REVOKED">Revoked</SelectItem>
+                <SelectItem value="AGENT_ACTIVE">Registered</SelectItem>
+                <SelectItem value="AGENT_DEPRECATED">Deprecated</SelectItem>
+                <SelectItem value="AGENT_REVOKED">Revoked</SelectItem>
               </SelectContent>
             </Select>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -1649,7 +1644,7 @@ export default function AdminAgentsPage() {
                               <Copy className="mr-2 h-4 w-4" />
                               Copy Hash
                             </DropdownMenuItem>
-                            {agent.status === 'AGENT_STATUS_REGISTERED' && (
+                            {agent.status === 'AGENT_ACTIVE' && (
                               <>
                                 <DropdownMenuItem className="text-yellow-600">
                                   <AlertTriangle className="mr-2 h-4 w-4" />
@@ -1661,7 +1656,7 @@ export default function AdminAgentsPage() {
                                 </DropdownMenuItem>
                               </>
                             )}
-                            {agent.status === 'AGENT_STATUS_DEPRECATED' && (
+                            {agent.status === 'AGENT_DEPRECATED' && (
                               <DropdownMenuItem className="text-red-600">
                                 <XCircle className="mr-2 h-4 w-4" />
                                 Revoke
