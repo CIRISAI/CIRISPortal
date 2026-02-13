@@ -527,6 +527,7 @@ export interface PartnerRecord {
   statusChangedAt?: number;
   licenseSignature?: HybridSignature;
   registrySignature?: HybridSignature;
+  allowedIdentityTemplates?: string[];
 }
 
 // ============================================================================

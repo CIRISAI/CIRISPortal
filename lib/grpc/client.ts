@@ -490,6 +490,10 @@ export async function registerAgent(params: {
   version: { major: number; minor: number; patch: number };
   capabilities: string[];
   maxAutonomyTier?: string;
+  identityTemplate?: string;
+  stewardshipTier?: number;
+  permittedActions?: string[];
+  templateHash?: string;
 }): Promise<any> {
   return promisifyUnary(getAdminClient(), 'registerAgent', {
     context: buildContext(),
@@ -499,6 +503,10 @@ export async function registerAgent(params: {
       version: params.version,
       capabilities: params.capabilities,
       maxAutonomyTier: params.maxAutonomyTier,
+      identityTemplate: params.identityTemplate,
+      stewardshipTier: params.stewardshipTier,
+      permittedActions: params.permittedActions,
+      templateHash: params.templateHash,
     },
   });
 }
@@ -510,6 +518,10 @@ export async function batchRegisterAgents(params: {
     version: { major: number; minor: number; patch: number };
     capabilities: string[];
     maxAutonomyTier?: string;
+    identityTemplate?: string;
+    stewardshipTier?: number;
+    permittedActions?: string[];
+    templateHash?: string;
   }>;
 }): Promise<any> {
   return promisifyUnary(getAdminClient(), 'batchRegisterAgents', {

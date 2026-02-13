@@ -71,6 +71,10 @@ interface AgentRecord {
   registeredAt: string;
   hasAttestation: boolean;
   attestation?: BuildAttestation;
+  identityTemplate?: string;
+  stewardshipTier?: number;
+  permittedActions?: string[];
+  templateHash?: string;
 }
 
 // Helper to extract hex hash from various formats
@@ -210,6 +214,76 @@ const CAPABILITIES = [
   'CAP_REASONING',
 ];
 
+// Identity template presets derived from CIRISAgent ciris_templates/*.yaml
+const TEMPLATE_PRESETS: Record<
+  string,
+  { label: string; tier: number; actions: string[]; description: string }
+> = {
+  echo: {
+    label: 'Echo',
+    tier: 4,
+    actions: ['OBSERVE', 'SPEAK', 'MEMORIZE', 'RECALL', 'DEFER', 'REJECT'],
+    description: 'Community helper — observation, speech, and memory',
+  },
+  scout: {
+    label: 'Scout',
+    tier: 3,
+    actions: [
+      'OBSERVE',
+      'SPEAK',
+      'MEMORIZE',
+      'RECALL',
+      'TOOL',
+      'DEFER',
+      'REJECT',
+    ],
+    description: 'Research agent — observation with tool access',
+  },
+  sage: {
+    label: 'Sage',
+    tier: 2,
+    actions: [
+      'OBSERVE',
+      'SPEAK',
+      'MEMORIZE',
+      'RECALL',
+      'TOOL',
+      'DEFER',
+      'REJECT',
+      'PONDER',
+    ],
+    description: 'Advisory agent — deep reasoning and tool use',
+  },
+  datum: {
+    label: 'Datum',
+    tier: 3,
+    actions: ['OBSERVE', 'MEMORIZE', 'RECALL', 'TOOL', 'DEFER', 'REJECT'],
+    description: 'Data processing — structured analysis without speech',
+  },
+  ally: {
+    label: 'Ally',
+    tier: 1,
+    actions: [
+      'OBSERVE',
+      'SPEAK',
+      'MEMORIZE',
+      'RECALL',
+      'TOOL',
+      'DEFER',
+      'REJECT',
+      'PONDER',
+      'ACT',
+    ],
+    description: 'Full autonomy agent — all actions including ACT',
+  },
+  default: {
+    label: 'Default',
+    tier: 4,
+    actions: ['OBSERVE', 'SPEAK', 'MEMORIZE', 'RECALL', 'DEFER', 'REJECT'],
+    description: 'Baseline template — same as Echo',
+  },
+};
+
 function formatVersion(version?: {
   major: number;
   minor: number;
@@ -250,6 +324,9 @@ function RegisterAgentDialog() {
     versionPatch: '0',
     capabilities: [] as string[],
     maxAutonomyTier: '',
+    identityTemplate: '',
+    stewardshipTier: 0,
+    permittedActions: [] as string[],
   });
   const queryClient = useQueryClient();
 
@@ -269,6 +346,12 @@ function RegisterAgentDialog() {
           },
           capabilities: data.capabilities,
           maxAutonomyTier: data.maxAutonomyTier,
+          identityTemplate: data.identityTemplate || undefined,
+          stewardshipTier: data.stewardshipTier || undefined,
+          permittedActions:
+            data.permittedActions.length > 0
+              ? data.permittedActions
+              : undefined,
         }),
       });
       const result = await response.json();
@@ -309,6 +392,9 @@ function RegisterAgentDialog() {
       versionPatch: '0',
       capabilities: [],
       maxAutonomyTier: '',
+      identityTemplate: '',
+      stewardshipTier: 0,
+      permittedActions: [],
     });
   };
 
@@ -458,6 +544,110 @@ function RegisterAgentDialog() {
               ))}
             </div>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Identity Template</Label>
+              <Select
+                value={formData.identityTemplate}
+                onValueChange={(value) => {
+                  const preset = TEMPLATE_PRESETS[value];
+                  if (preset) {
+                    setFormData({
+                      ...formData,
+                      identityTemplate: value,
+                      stewardshipTier: preset.tier,
+                      permittedActions: [...preset.actions],
+                    });
+                  } else {
+                    setFormData({
+                      ...formData,
+                      identityTemplate: value,
+                      stewardshipTier: 0,
+                      permittedActions: [],
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select template (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => (
+                    <SelectItem key={key} value={key}>
+                      {preset.label} — Tier {preset.tier}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.identityTemplate && (
+              <div className="space-y-2">
+                <Label>Stewardship Tier</Label>
+                <Select
+                  value={formData.stewardshipTier.toString()}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      stewardshipTier: parseInt(value),
+                    })
+                  }
+                  disabled={formData.identityTemplate !== 'custom'}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((tier) => (
+                      <SelectItem key={tier} value={tier.toString()}>
+                        Tier {tier}{' '}
+                        {tier === 1
+                          ? '(Highest Autonomy)'
+                          : tier === 5
+                            ? '(Most Restricted)'
+                            : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          {formData.identityTemplate && (
+            <div className="space-y-2">
+              <Label>
+                Permitted Actions
+                {formData.identityTemplate !== 'custom' && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (from preset)
+                  </span>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {TEMPLATE_PRESETS[formData.identityTemplate]?.description ||
+                  'Custom template configuration'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {formData.permittedActions.map((action) => (
+                  <Badge
+                    key={action}
+                    variant="secondary"
+                    className="font-mono text-xs"
+                  >
+                    {action}
+                  </Badge>
+                ))}
+                {formData.permittedActions.length === 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    No actions configured
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
@@ -854,6 +1044,47 @@ function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
               )) || <span className="text-muted-foreground">None</span>}
             </div>
           </div>
+
+          {agent.identityTemplate && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label className="text-muted-foreground">
+                    Identity Template
+                  </Label>
+                  <p className="font-medium capitalize">
+                    {agent.identityTemplate}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">
+                    Stewardship Tier
+                  </Label>
+                  <Badge variant="outline" className="mt-1">
+                    Tier {agent.stewardshipTier || '-'}
+                  </Badge>
+                </div>
+              </div>
+              {agent.permittedActions && agent.permittedActions.length > 0 && (
+                <div>
+                  <Label className="text-muted-foreground">
+                    Permitted Actions
+                  </Label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {agent.permittedActions.map((action) => (
+                      <Badge
+                        key={action}
+                        variant="secondary"
+                        className="font-mono text-xs"
+                      >
+                        {action}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -880,6 +1111,9 @@ async function fetchAgents(): Promise<AgentsResponse> {
     agentHash: getAgentHashHex(agent),
     status: agent.status || 'AGENT_STATUS_REGISTERED',
     capabilities: agent.capabilities || agent.baseCapabilities || [],
+    identityTemplate: agent.identityTemplate || '',
+    stewardshipTier: agent.stewardshipTier || 0,
+    permittedActions: agent.permittedActions || [],
   }));
 
   return {
@@ -1110,6 +1344,7 @@ export default function AdminAgentsPage() {
                     <th className="pb-3 font-medium">Hash</th>
                     <th className="pb-3 font-medium">Type</th>
                     <th className="pb-3 font-medium">Version</th>
+                    <th className="pb-3 font-medium">Template</th>
                     <th className="pb-3 font-medium">Status</th>
                     <th className="pb-3 font-medium">Registered</th>
                     <th className="pb-3 font-medium">Attestation</th>
@@ -1148,6 +1383,27 @@ export default function AdminAgentsPage() {
                       </td>
                       <td className="py-4 font-mono">
                         {formatVersion(agent.version)}
+                      </td>
+                      <td className="py-4">
+                        {agent.identityTemplate ? (
+                          <div className="flex items-center gap-1">
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-xs capitalize"
+                            >
+                              {agent.identityTemplate}
+                            </Badge>
+                            {agent.stewardshipTier ? (
+                              <span className="text-xs text-muted-foreground">
+                                T{agent.stewardshipTier}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            -
+                          </span>
+                        )}
                       </td>
                       <td className="py-4">
                         <StatusBadge status={agent.status} />

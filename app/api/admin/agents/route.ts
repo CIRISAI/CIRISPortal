@@ -119,8 +119,16 @@ export async function POST(request: Request) {
     }
 
     // Single registration
-    const { agentHash, agentType, version, capabilities, maxAutonomyTier } =
-      body;
+    const {
+      agentHash,
+      agentType,
+      version,
+      capabilities,
+      maxAutonomyTier,
+      identityTemplate,
+      stewardshipTier,
+      permittedActions,
+    } = body;
 
     if (!agentHash || !agentType || !version || !capabilities) {
       return NextResponse.json(
@@ -138,6 +146,9 @@ export async function POST(request: Request) {
       version,
       capabilities,
       maxAutonomyTier,
+      identityTemplate,
+      stewardshipTier,
+      permittedActions,
     });
 
     return NextResponse.json({
