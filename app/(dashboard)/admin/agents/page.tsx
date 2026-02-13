@@ -551,14 +551,17 @@ function RegisterAgentDialog() {
           Register Agent
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl" data-testid="register-agent-dialog">
+      <DialogContent
+        className="flex max-h-[90vh] max-w-2xl flex-col"
+        data-testid="register-agent-dialog"
+      >
         <DialogHeader>
           <DialogTitle>Register New Agent</DialogTitle>
           <DialogDescription>
             Add a new agent build to the registry
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 overflow-y-auto py-4 pr-1">
           <div className="space-y-2">
             <Label htmlFor="agentHash">Agent Hash (SHA-256)</Label>
             <Input
