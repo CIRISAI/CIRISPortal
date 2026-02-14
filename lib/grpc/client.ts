@@ -78,14 +78,16 @@ export function getPortalClient(): any {
 // JWT Authentication for Registry gRPC calls
 // ============================================================================
 
-const REGISTRY_JWT_SECRET =
-  process.env.REGISTRY_JWT_SECRET || process.env.JWT_SECRET || '';
-
-if (process.env.NODE_ENV === 'production' && !REGISTRY_JWT_SECRET) {
-  throw new Error(
-    'REGISTRY_JWT_SECRET (or JWT_SECRET) must be set in production. ' +
-      'Refusing to start without a signing secret for Registry authentication.'
-  );
+function getRegistryJwtSecret(): string {
+  const secret =
+    process.env.REGISTRY_JWT_SECRET || process.env.JWT_SECRET || '';
+  if (process.env.NODE_ENV === 'production' && !secret) {
+    throw new Error(
+      'REGISTRY_JWT_SECRET (or JWT_SECRET) must be set in production. ' +
+        'Refusing to start without a signing secret for Registry authentication.'
+    );
+  }
+  return secret;
 }
 
 const REGISTRY_JWT_ISSUER = process.env.REGISTRY_JWT_ISSUER || 'ciris-registry';
@@ -95,14 +97,15 @@ const REGISTRY_JWT_ISSUER = process.env.REGISTRY_JWT_ISSUER || 'ciris-registry';
  * The Portal acts as a service account with admin role (role=1).
  */
 async function generateServiceJWT(): Promise<string> {
-  if (!REGISTRY_JWT_SECRET) {
+  const jwtSecret = getRegistryJwtSecret();
+  if (!jwtSecret) {
     console.warn(
       '[gRPC] No REGISTRY_JWT_SECRET configured — requests to protected endpoints will fail'
     );
     return '';
   }
 
-  const secret = new TextEncoder().encode(REGISTRY_JWT_SECRET);
+  const secret = new TextEncoder().encode(jwtSecret);
   const token = await new SignJWT({
     sub: 'portal-service',
     org_id: 'ciris-internal',
