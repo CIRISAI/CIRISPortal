@@ -18,9 +18,7 @@ function isPublicRoute(pathname: string): boolean {
 // Wrap withAuth to allow public routes through
 const authMiddleware = withAuth(
   function middleware(req) {
-    // Add environment info to response headers for debugging
     const response = NextResponse.next();
-    response.headers.set('x-app-env', process.env.APP_ENV || 'unknown');
     return response;
   },
   {

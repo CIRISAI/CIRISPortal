@@ -9,7 +9,7 @@
 # Configuration
 GRPC_URL="${GRPC_URL:-localhost:50052}"
 PORTAL_URL="${PORTAL_URL:-http://localhost:3003}"
-TEST_ORG_ID="29216928-351b-4963-9fcb-bcaa44383a29"
+TEST_ORG_ID="${TEST_ORG_ID:-YOUR_TEST_ORG_ID}"
 TEST_USER_ID="admin@qa-primary.test"
 
 # Colors

@@ -80,6 +80,14 @@ export function getPortalClient(): any {
 
 const REGISTRY_JWT_SECRET =
   process.env.REGISTRY_JWT_SECRET || process.env.JWT_SECRET || '';
+
+if (process.env.NODE_ENV === 'production' && !REGISTRY_JWT_SECRET) {
+  throw new Error(
+    'REGISTRY_JWT_SECRET (or JWT_SECRET) must be set in production. ' +
+      'Refusing to start without a signing secret for Registry authentication.'
+  );
+}
+
 const REGISTRY_JWT_ISSUER = process.env.REGISTRY_JWT_ISSUER || 'ciris-registry';
 
 /**

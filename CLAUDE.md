@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-CIRISPortal is the administrative interface for the CIRIS ecosystem, deployed at **portal.ciris.ai**. It provides:
+CIRISPortal is the administrative interface for the CIRIS ecosystem. It provides:
 
 - **Organization Management** - Onboard and manage partner organizations
 - **User Management** - Invite users, assign roles within organizations
@@ -18,14 +18,13 @@ This is a **static ops tool** - no AI agents, just administrative CRUD operation
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  portal.ciris.ai (CIRISPortal)                                  │
+│  CIRISPortal                                                    │
 │  Next.js 15 + NextAuth + Cloudflare Pages                       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼ (gRPC via lib/grpc/client.ts)
 ┌─────────────────────────────────────────────────────────────────┐
-│  registry.ciris.ai (CIRISRegistry v1.1.0)                       │
-│  Rust gRPC server on port 50052                                 │
+│  CIRISRegistry (Rust gRPC server)                               │
 │  Services: RegistryService, RegistryAdminService, PortalService │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -89,11 +88,7 @@ The proto definition is at `lib/grpc/ciris_registry.proto` - keep in sync with C
 
 ### Test Users (devtest only)
 
-```
-admin@qa-primary.test / testpass123 - Admin role
-user@qa-primary.test / testpass123 - User role
-admin@qa-secondary.test / testpass123 - Admin (different org)
-```
+Configure test users via environment variables or the auth config in `lib/auth/`. See `.env.example` for details.
 
 ### Middleware
 
@@ -197,7 +192,7 @@ Content-Security-Policy: default-src 'none' (API routes)
 
 - Custodied private keys: AES-256-GCM envelope encryption
 - Master key stored as Cloudflare secret (`KEY_ENCRYPTION_KEY`)
-- Key derivation: `org_key = HKDF(master_key, org_id, "ciris-portal-keys-v1")`
+- Key derivation: HKDF-based per-org key derivation
 
 ## Development
 
@@ -238,24 +233,12 @@ Portal is the interface to CIRISRegistry for agent registration and key generati
 
 **Critical architecture**: Signing keys MUST be generated here (Portal → Registry). Agents receive their signing key at install time. CIRISNode verifies all agent signatures against Registry — self-generated keys won't work.
 
-### Known Issues
+### Development Notes
 
-1. **Agent registration field mapping (BUG-002, FIXED)**: Proto enum names were mismatched (`AGENT_TYPE_CIRIS_CORE` vs `CIRISCARE`). Fixed in commit `159d57f` — Portal form now uses correct proto enum names for agent types, autonomy tiers, and status values.
-
-2. **Keys page 401 (BUG-003, FIXED)**: SDK client fell back to direct Registry HTTP URL (requiring JWT auth the browser can't provide). Fixed in commit `159d57f` — SDK client defaults to Portal's API proxy route (`/api/registry`).
-
-3. **Private key export gap (FIXED)**: Registry now returns the Ed25519 private key in `GenerateKeyPairResponse.ed25519_private_key`. Portal shows a one-time download dialog (`PrivateKeyDownloadDialog`) after key generation — downloads raw 32-byte binary as `agent_signing.key`. Private key is never stored; shown once then cleared from state.
-
-4. **data-testid coverage**: Registration dialog has good coverage (`register-agent-btn`, `input-agent-hash`, `select-agent-type`, `select-autonomy-tier`, `select-identity-template`). Agent list table and key management pages need data-testid attributes for E2E automation.
-
-5. **No Playwright tests yet**: E2E tests should be added in an `e2e/` directory covering agent registration and key generation flows.
-
-### Separation from ethicsengine-portal
-
-- **CIRISPortal** (portal.ciris.ai): Agent registry, key custody, partner management → talks to CIRISRegistry (gRPC)
-- **ethicsengine-portal** (portal.ethicsengine.org): Customer billing, analytics → talks to ethicsengine-portal-api → Stripe + CIRISNode
-
-These are completely separate products. Do not confuse them.
+- Registration dialog has `data-testid` coverage (`register-agent-btn`, `input-agent-hash`, `select-agent-type`, `select-autonomy-tier`, `select-identity-template`). Agent list table and key management pages need additional `data-testid` attributes for E2E automation.
+- E2E tests should be added in an `e2e/` directory covering agent registration and key generation flows.
+- Portal form uses proto-compatible enum names for agent types, autonomy tiers, and status values. Keep `lib/grpc/client.ts` enum mappings in sync with the proto definition.
+- SDK client uses Portal's API proxy route (`/api/registry`) by default to avoid CORS and auth issues in the browser.
 
 ## Issue Reporting
 

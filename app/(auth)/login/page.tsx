@@ -26,7 +26,8 @@ const TEST_USERS = [
   },
 ];
 
-const TEST_PASSWORD = 'testpass123';
+// Test password should be set server-side only (e.g., via environment variable)
+const TEST_PASSWORD = '';
 
 function LoginForm() {
   const searchParams = useSearchParams();

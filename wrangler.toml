@@ -41,8 +41,8 @@ name = "cirisportal-staging"
 APP_ENV = "stage"
 NEXT_PUBLIC_APP_ENV = "stage"
 NEXT_PUBLIC_REGISTRY_API_URL = "/api/registry"
-REGISTRY_GRPC_URL = "staging.registry.ciris-services-1.ai:50051"
-NEXTAUTH_URL = "https://cirisportal-staging.pages.dev"
+REGISTRY_GRPC_URL = "YOUR_REGISTRY_GRPC_HOST:50051"
+NEXTAUTH_URL = "https://YOUR_STAGING_URL"
 
 # ===========================================
 # Production Environment
@@ -54,8 +54,8 @@ name = "cirisportal"
 APP_ENV = "prod"
 NEXT_PUBLIC_APP_ENV = "prod"
 NEXT_PUBLIC_REGISTRY_API_URL = "/api/registry"
-REGISTRY_GRPC_URL = "registry.ciris.ai:50052"
-NEXTAUTH_URL = "https://portal.ciris.ai"
+REGISTRY_GRPC_URL = "YOUR_REGISTRY_GRPC_HOST:50051"
+NEXTAUTH_URL = "https://YOUR_PRODUCTION_URL"
 ALLOWED_EMAIL_DOMAINS = "ciris.ai"
 
 # ===========================================
