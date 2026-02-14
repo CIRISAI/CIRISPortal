@@ -22,32 +22,36 @@ export async function GET(request: Request) {
     if (type === 'health' || type === 'all') {
       try {
         results.health = await healthCheck(true);
-      } catch (e: any) {
-        results.health = { error: e.message };
+      } catch (e: unknown) {
+        console.error('[API] Health check sub-query error:', e);
+        results.health = { error: 'Unavailable' };
       }
     }
 
     if (type === 'emergency' || type === 'all') {
       try {
         results.emergency = await getEmergencyStatus();
-      } catch (e: any) {
-        results.emergency = { error: e.message, isLocked: false };
+      } catch (e: unknown) {
+        console.error('[API] Emergency status sub-query error:', e);
+        results.emergency = { error: 'Unavailable', isLocked: false };
       }
     }
 
     if (type === 'capabilities' || type === 'all') {
       try {
         results.capabilities = await getCapabilities();
-      } catch (e: any) {
-        results.capabilities = { error: e.message };
+      } catch (e: unknown) {
+        console.error('[API] Capabilities sub-query error:', e);
+        results.capabilities = { error: 'Unavailable' };
       }
     }
 
     if (type === 'metrics' || type === 'all') {
       try {
         results.metrics = await getMetrics();
-      } catch (e: any) {
-        results.metrics = { error: e.message };
+      } catch (e: unknown) {
+        console.error('[API] Metrics sub-query error:', e);
+        results.metrics = { error: 'Unavailable' };
       }
     }
 
@@ -57,10 +61,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(results);
-  } catch (error: any) {
-    console.error('[API] Status error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] Status error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

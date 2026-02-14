@@ -23,10 +23,9 @@ export async function GET() {
       context: response.context,
     });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] Get emergency status error:', err.message);
+    console.error('[API] Get emergency status error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -94,10 +93,9 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] Emergency action error:', err.message);
+    console.error('[API] Emergency action error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

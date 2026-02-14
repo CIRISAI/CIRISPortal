@@ -27,10 +27,10 @@ export async function GET(request: Request) {
       nextPageToken: response.nextPageToken,
       context: response.context,
     });
-  } catch (error: any) {
-    console.error('[API] List system users error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] List system users error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -83,10 +83,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(response);
-  } catch (error: any) {
-    console.error('[API] System user action error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] System user action error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

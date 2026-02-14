@@ -26,10 +26,10 @@ export async function GET(
       context: response.context,
     });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] getPartnerActivity error:', err.message);
+    console.error('[API] getPartnerActivity error:', error);
 
     // Return default activity data on error (graceful degradation)
+    const err = error as { code?: number };
     if (err.code === 5 || err.code === 12) {
       // NOT_FOUND or UNIMPLEMENTED
       const { partnerId } = await params;
@@ -46,7 +46,7 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

@@ -86,10 +86,10 @@ export async function GET(request: Request) {
       },
       { status: 400 }
     );
-  } catch (error: any) {
-    console.error('[API] Lookup error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] Lookup error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

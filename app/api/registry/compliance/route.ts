@@ -28,10 +28,10 @@ export async function POST(request: Request) {
       data: response,
       context: response.context,
     });
-  } catch (error: any) {
-    console.error('[API] Compliance report error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] Compliance report error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

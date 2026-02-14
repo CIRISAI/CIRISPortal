@@ -53,10 +53,10 @@ export async function GET(request: Request) {
       nextPageToken: response.nextPageToken,
       context: response.context,
     });
-  } catch (error: any) {
-    console.error('[API] Get audit log error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] Get audit log error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -84,10 +84,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(response);
-  } catch (error: any) {
-    console.error('[API] Export audit log error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] Export audit log error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

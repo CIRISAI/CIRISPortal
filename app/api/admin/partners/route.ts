@@ -28,10 +28,9 @@ export async function GET(request: Request) {
       context: response.context,
     });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] List expiring licenses error:', err.message);
+    console.error('[API] List expiring licenses error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

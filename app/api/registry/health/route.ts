@@ -9,10 +9,10 @@ export async function GET(request: Request) {
 
     const response = await healthCheck(includeDiagnostics);
     return NextResponse.json(response);
-  } catch (error: any) {
-    console.error('[API] Health check error:', error.message);
+  } catch (error: unknown) {
+    console.error('[API] Health check error:', error);
     return NextResponse.json(
-      { error: error.message, code: error.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

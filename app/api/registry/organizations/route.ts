@@ -36,11 +36,10 @@ export async function GET(request: NextRequest) {
       nextPageToken: response.nextPageToken,
       totalCount: response.totalCount,
     });
-  } catch (error) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] List organizations error:', err.message);
+  } catch (error: unknown) {
+    console.error('[API] List organizations error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -178,11 +177,10 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
       adminUserId: response.adminUserId,
     });
-  } catch (error) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] Create organization error:', err.message);
+  } catch (error: unknown) {
+    console.error('[API] Create organization error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

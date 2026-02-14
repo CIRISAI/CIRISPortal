@@ -22,10 +22,9 @@ export async function GET(request: Request) {
       context: response.context,
     });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] Get revocation list error:', err.message);
+    console.error('[API] Get revocation list error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -99,10 +98,9 @@ export async function POST(request: Request) {
       context: response.context,
     });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] Mass revoke error:', err.message);
+    console.error('[API] Mass revoke error:', error);
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

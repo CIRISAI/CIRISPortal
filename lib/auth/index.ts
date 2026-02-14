@@ -20,6 +20,29 @@ const AUDIT_USER_LOGIN = 13;
 export type { UserRole, ProvisionedUser };
 
 /**
+ * Lazy validation that NEXTAUTH_SECRET is set in non-devtest environments.
+ * Called on first auth request, NOT at module load time (would break `npm run build`).
+ */
+let _nextAuthSecretValidated = false;
+function validateNextAuthSecret(): void {
+  if (_nextAuthSecretValidated) return;
+  _nextAuthSecretValidated = true;
+
+  if (process.env.APP_ENV !== 'devtest' && !process.env.NEXTAUTH_SECRET) {
+    throw new Error(
+      'NEXTAUTH_SECRET must be set in production/staging. ' +
+        'Refusing to start without a session signing secret.'
+    );
+  }
+}
+
+/**
+ * Test user password — loaded from environment variable (dev-only).
+ * Never hardcode credentials in source; set TEST_USER_PASSWORD in .env.local for devtest.
+ */
+const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || '';
+
+/**
  * Test users available in devtest environment
  */
 const TEST_USERS: Record<
@@ -31,7 +54,7 @@ const TEST_USERS: Record<
     email: 'admin@qa-primary.test',
     name: 'QA Admin User',
     image: null,
-    password: 'testpass123',
+    password: TEST_PASSWORD,
     orgId: TEST_ORG_ID,
     role: 'admin',
   },
@@ -40,7 +63,7 @@ const TEST_USERS: Record<
     email: 'user@qa-primary.test',
     name: 'QA Regular User',
     image: null,
-    password: 'testpass123',
+    password: TEST_PASSWORD,
     orgId: TEST_ORG_ID,
     role: 'licensee',
   },
@@ -49,7 +72,7 @@ const TEST_USERS: Record<
     email: 'partner@qa-primary.test',
     name: 'QA Partner Admin',
     image: null,
-    password: 'testpass123',
+    password: TEST_PASSWORD,
     orgId: TEST_ORG_ID,
     role: 'partner',
   },
@@ -58,7 +81,7 @@ const TEST_USERS: Record<
     email: 'admin@qa-secondary.test',
     name: 'QA Secondary Admin',
     image: null,
-    password: 'testpass123',
+    password: TEST_PASSWORD,
     orgId: TEST_SECONDARY_ORG_ID,
     role: 'admin',
   },
@@ -68,6 +91,9 @@ const TEST_USERS: Record<
  * Build providers based on environment
  */
 function buildProviders() {
+  // Validate NEXTAUTH_SECRET on first auth request (not at build time)
+  validateNextAuthSecret();
+
   const providers = [];
   const authConfig = getAuthConfig();
   const appEnv = getAppEnv();

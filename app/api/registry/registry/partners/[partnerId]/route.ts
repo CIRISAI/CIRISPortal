@@ -55,10 +55,10 @@ export async function GET(
       context: response.context,
     });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: number };
-    console.error('[API] lookupPartner error:', err.message);
+    console.error('[API] lookupPartner error:', error);
 
     // Return not found for gRPC NOT_FOUND errors
+    const err = error as { code?: number };
     if (err.code === 5) {
       return NextResponse.json(
         { found: false, partner: null },
@@ -67,7 +67,7 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { error: err.message, code: err.code },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
