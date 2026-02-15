@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import {
-  listAvailablePlatforms,
-  getDistManifest,
+  getLatestReleaseTag,
+  getAllPlatformDownloads,
+  fetchReleaseManifest,
   SUPPORTED_PLATFORMS,
 } from '@/lib/verify/distribution';
 
 /**
  * GET /api/verify/binaries
  *
- * List available CIRISVerify binaries and their SHA-256 hashes.
+ * List available CIRISVerify platform downloads from GitHub Releases.
+ * Returns direct download URLs for all supported platforms.
  * Requires authentication (NextAuth session or X-Device-Code).
  */
 export async function GET(request: Request) {
@@ -25,13 +27,16 @@ export async function GET(request: Request) {
     }
   }
 
-  const manifest = getDistManifest();
-  const available = listAvailablePlatforms();
+  const version = await getLatestReleaseTag('0.1.0');
+  const downloads = getAllPlatformDownloads(version);
+  const manifest = await fetchReleaseManifest(version);
 
   return NextResponse.json({
-    version: (manifest as any)?.version || '0.1.0',
+    version,
+    source: 'github',
+    releases_url: `https://github.com/CIRISAI/CIRISVerify/releases/tag/${version}`,
     supported_platforms: SUPPORTED_PLATFORMS,
-    available: available,
+    downloads,
     manifest,
   });
 }

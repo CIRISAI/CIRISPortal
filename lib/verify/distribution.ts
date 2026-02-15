@@ -1,9 +1,13 @@
 /**
  * CIRISVerify binary distribution.
  *
- * Serves pre-built CIRISVerify binaries for all supported platforms.
- * Binaries are stored on disk (deployed via Ansible as secrets) and
- * their SHA-256 hashes are published to CIRISRegistry at release time.
+ * Since CIRISVerify is open-source (AGPL-3.0), platform binaries are
+ * distributed via GitHub Releases at:
+ *   https://github.com/CIRISAI/CIRISVerify/releases
+ *
+ * This module provides helpers to resolve the correct GitHub release
+ * asset URL for each platform and verify binary integrity against
+ * the manifest published at release time.
  *
  * Supported platforms:
  * - darwin-arm64       (macOS Apple Silicon)
@@ -18,22 +22,11 @@
  * - windows-x86_64     (Windows x64)
  */
 
-import { readFileSync, existsSync, statSync } from 'fs';
-import { join } from 'path';
-import crypto from 'crypto';
+const GITHUB_RELEASES_URL =
+  process.env.CIRIS_VERIFY_RELEASES_URL ||
+  'https://github.com/CIRISAI/CIRISVerify/releases';
 
-// Base path for CIRISVerify binaries on the deployment host
-const VERIFY_BASE_PATH =
-  process.env.CIRIS_VERIFY_DIST_PATH || '/opt/ciris/verify/dist';
-
-// Development fallback
-const DEV_VERIFY_PATH = '/Users/macmini/CIRISVerify/dist';
-
-function getBasePath(): string {
-  if (existsSync(VERIFY_BASE_PATH)) return VERIFY_BASE_PATH;
-  if (existsSync(DEV_VERIFY_PATH)) return DEV_VERIFY_PATH;
-  return VERIFY_BASE_PATH; // will 404 gracefully
-}
+const GITHUB_REPO = 'CIRISAI/CIRISVerify';
 
 export interface VerifyBinaryInfo {
   platform: string;
@@ -43,135 +36,169 @@ export interface VerifyBinaryInfo {
   type: 'shared' | 'static' | 'dylib' | 'dll';
 }
 
-/**
- * Platform → binary filename mapping.
- */
-const PLATFORM_BINARIES: Record<
-  string,
-  { file: string; dir: string; type: VerifyBinaryInfo['type'] }[]
-> = {
-  'darwin-arm64': [
-    { file: 'libciris_verify_ffi.dylib', dir: 'darwin-arm64', type: 'dylib' },
-    { file: 'libciris_verify_ffi.a', dir: 'darwin-arm64', type: 'static' },
-  ],
-  'darwin-x86_64': [
-    { file: 'libciris_verify_ffi.dylib', dir: 'darwin-x86_64', type: 'dylib' },
-    { file: 'libciris_verify_ffi.a', dir: 'darwin-x86_64', type: 'static' },
-  ],
-  'linux-x86_64': [
-    { file: 'libciris_verify_ffi.so', dir: 'linux-x86_64', type: 'shared' },
-  ],
-  'linux-arm64': [
-    { file: 'libciris_verify_ffi.so', dir: 'linux-arm64', type: 'shared' },
-  ],
-  'ios-arm64': [
-    { file: 'libciris_verify_ffi.a', dir: 'ios-arm64', type: 'static' },
-  ],
-  'ios-sim-arm64': [
-    { file: 'libciris_verify_ffi.a', dir: 'ios-sim-arm64', type: 'static' },
-  ],
-  'android-arm64-v8a': [
-    {
-      file: 'libciris_verify_ffi.so',
-      dir: 'android-arm64-v8a',
-      type: 'shared',
-    },
-  ],
-  'android-armeabi-v7a': [
-    {
-      file: 'libciris_verify_ffi.so',
-      dir: 'android-armeabi-v7a',
-      type: 'shared',
-    },
-  ],
-  'android-x86_64': [
-    { file: 'libciris_verify_ffi.so', dir: 'android-x86_64', type: 'shared' },
-  ],
-  'windows-x86_64': [
-    { file: 'ciris_verify_ffi.dll', dir: 'windows-x86_64', type: 'dll' },
-  ],
-};
-
-/**
- * List all available platforms and their binary info.
- */
-export function listAvailablePlatforms(): VerifyBinaryInfo[] {
-  const base = getBasePath();
-  const results: VerifyBinaryInfo[] = [];
-
-  for (const [platform, binaries] of Object.entries(PLATFORM_BINARIES)) {
-    for (const bin of binaries) {
-      const fullPath = join(base, bin.dir, bin.file);
-      if (existsSync(fullPath)) {
-        const stat = statSync(fullPath);
-        const hash = crypto
-          .createHash('sha256')
-          .update(readFileSync(fullPath))
-          .digest('hex');
-        results.push({
-          platform,
-          file: bin.file,
-          sha256: hash,
-          size: stat.size,
-          type: bin.type,
-        });
-      }
-    }
-  }
-
-  return results;
+export interface PlatformDownload {
+  platform: string;
+  /** Direct download URL for the platform archive from GitHub Releases */
+  downloadUrl: string;
+  /** Archive filename (e.g., ciris-verify-v0.1.0-linux-x86_64.tar.gz) */
+  archiveFile: string;
+  /** Inner binary filename after extraction */
+  binaryFile: string;
+  type: VerifyBinaryInfo['type'];
 }
 
 /**
- * Get a specific binary for a platform.
- * Returns the file buffer + metadata, or null if not found.
+ * Platform → release archive mapping.
+ * Archives are named: ciris-verify-{version}-{platform}.tar.gz (or .zip for Windows)
  */
-export function getVerifyBinary(
-  platform: string,
-  preferredType?: VerifyBinaryInfo['type']
-): { buffer: Buffer; info: VerifyBinaryInfo } | null {
-  const binaries = PLATFORM_BINARIES[platform];
-  if (!binaries) return null;
+const PLATFORM_ARCHIVES: Record<
+  string,
+  { archiveSuffix: string; binaryFile: string; type: VerifyBinaryInfo['type'] }
+> = {
+  'darwin-arm64': {
+    archiveSuffix: 'macos-arm64.tar.gz',
+    binaryFile: 'libciris_verify_ffi.dylib',
+    type: 'dylib',
+  },
+  'darwin-x86_64': {
+    archiveSuffix: 'macos-x86_64.tar.gz',
+    binaryFile: 'libciris_verify_ffi.dylib',
+    type: 'dylib',
+  },
+  'linux-x86_64': {
+    archiveSuffix: 'linux-x86_64.tar.gz',
+    binaryFile: 'libciris_verify_ffi.so',
+    type: 'shared',
+  },
+  'linux-arm64': {
+    archiveSuffix: 'linux-arm64.tar.gz',
+    binaryFile: 'libciris_verify_ffi.so',
+    type: 'shared',
+  },
+  'android-arm64-v8a': {
+    archiveSuffix: 'android.tar.gz',
+    binaryFile: 'libciris_verify_ffi.so',
+    type: 'shared',
+  },
+  'android-armeabi-v7a': {
+    archiveSuffix: 'android.tar.gz',
+    binaryFile: 'libciris_verify_ffi.so',
+    type: 'shared',
+  },
+  'android-x86_64': {
+    archiveSuffix: 'android.tar.gz',
+    binaryFile: 'libciris_verify_ffi.so',
+    type: 'shared',
+  },
+  'ios-arm64': {
+    archiveSuffix: 'ios.tar.gz',
+    binaryFile: 'libciris_verify_ffi.a',
+    type: 'static',
+  },
+  'ios-sim-arm64': {
+    archiveSuffix: 'ios.tar.gz',
+    binaryFile: 'libciris_verify_ffi.a',
+    type: 'static',
+  },
+  'windows-x86_64': {
+    archiveSuffix: 'windows-x86_64.zip',
+    binaryFile: 'ciris_verify_ffi.dll',
+    type: 'dll',
+  },
+};
 
-  const base = getBasePath();
+/**
+ * Build the GitHub Releases download URL for a specific version and platform.
+ */
+export function getDownloadUrl(
+  version: string,
+  platform: string
+): PlatformDownload | null {
+  const entry = PLATFORM_ARCHIVES[platform];
+  if (!entry) return null;
 
-  // If preferred type specified, try that first
-  const ordered = preferredType
-    ? [
-        ...binaries.filter((b) => b.type === preferredType),
-        ...binaries.filter((b) => b.type !== preferredType),
-      ]
-    : binaries;
+  const tag = version.startsWith('v') ? version : `v${version}`;
+  const archiveFile = `ciris-verify-${tag}-${entry.archiveSuffix}`;
+  const downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/${tag}/${archiveFile}`;
 
-  for (const bin of ordered) {
-    const fullPath = join(base, bin.dir, bin.file);
-    if (existsSync(fullPath)) {
-      const buffer = readFileSync(fullPath);
-      const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-      return {
-        buffer,
-        info: {
-          platform,
-          file: bin.file,
-          sha256: hash,
-          size: buffer.length,
-          type: bin.type,
-        },
-      };
+  return {
+    platform,
+    downloadUrl,
+    archiveFile,
+    binaryFile: entry.binaryFile,
+    type: entry.type,
+  };
+}
+
+/**
+ * Get the latest release tag from GitHub API.
+ * Falls back to the provided default if the API call fails.
+ */
+export async function getLatestReleaseTag(
+  fallback: string = 'latest'
+): Promise<string> {
+  try {
+    const resp = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+      {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+      }
+    );
+    if (resp.ok) {
+      const data = (await resp.json()) as { tag_name: string };
+      return data.tag_name;
     }
+  } catch {
+    // Fall through to fallback
   }
+  return fallback;
+}
 
+/**
+ * Build the manifest.json download URL for a specific release.
+ * The manifest contains SHA-256 hashes for all platform binaries.
+ */
+export function getManifestUrl(version: string): string {
+  const tag = version.startsWith('v') ? version : `v${version}`;
+  return `https://github.com/${GITHUB_REPO}/releases/download/${tag}/manifest.json`;
+}
+
+/**
+ * Fetch the release manifest (SHA-256 hashes) from GitHub.
+ */
+export async function fetchReleaseManifest(
+  version: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const url = getManifestUrl(version);
+    const resp = await fetch(url);
+    if (resp.ok) {
+      return (await resp.json()) as Record<string, unknown>;
+    }
+  } catch {
+    // Manifest not available
+  }
   return null;
 }
 
 /**
- * Read the distribution manifest (generated at build time).
+ * Get download info for all supported platforms at a given version.
  */
-export function getDistManifest(): Record<string, unknown> | null {
-  const base = getBasePath();
-  const manifestPath = join(base, 'manifest.json');
-  if (!existsSync(manifestPath)) return null;
-  return JSON.parse(readFileSync(manifestPath, 'utf-8'));
+export function getAllPlatformDownloads(version: string): PlatformDownload[] {
+  return Object.keys(PLATFORM_ARCHIVES)
+    .map((platform) => getDownloadUrl(version, platform))
+    .filter((d): d is PlatformDownload => d !== null);
 }
 
-export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_BINARIES);
+/**
+ * Build a "latest" redirect URL for a platform (uses GitHub's /latest redirect).
+ */
+export function getLatestDownloadUrl(platform: string): string | null {
+  const entry = PLATFORM_ARCHIVES[platform];
+  if (!entry) return null;
+  // GitHub doesn't support /latest/download for unknown filenames without the tag,
+  // so we construct the releases page URL — agents should resolve latest tag first.
+  return `${GITHUB_RELEASES_URL}/latest`;
+}
+
+export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_ARCHIVES);
