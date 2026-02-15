@@ -116,8 +116,14 @@ export async function POST(request: Request) {
         approvedAdapters: selectedAdapters,
         orgId,
       });
-    } catch (regError) {
+    } catch (regError: any) {
       console.error('[Device Auth] Agent registration failed:', regError);
+      console.error(
+        '[Device Auth] Registration error details:',
+        regError?.message,
+        'code:',
+        regError?.code
+      );
       // Continue anyway — key generation is more important
       // TODO: Make this atomic (register + key gen in one gRPC call)
     }
@@ -130,11 +136,17 @@ export async function POST(request: Request) {
         requesterUserId: session.user.email,
         activateImmediately: true,
       });
-    } catch (keyError) {
+    } catch (keyError: any) {
       console.error('[Device Auth] Key generation failed:', keyError);
       updateRecord(record.deviceCode, { status: 'denied' });
       return NextResponse.json(
-        { error: 'Key generation failed' },
+        {
+          error: 'Key generation failed',
+          details: keyError?.message || String(keyError),
+          code: keyError?.code,
+          grpc_url:
+            process.env.REGISTRY_GRPC_URL || 'localhost:50052 (default)',
+        },
         { status: 500 }
       );
     }
