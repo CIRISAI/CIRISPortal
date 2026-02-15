@@ -15,29 +15,25 @@ const PORTAL_BASE_URL =
  * POST /api/device/authorize
  *
  * Initiates a device authorization flow (RFC 8628).
- * Called by CIRISAgent (unauthenticated) when user clicks "Connect to Node".
+ * Called by CIRISAgent (unauthenticated) when user clicks "Acquire a License".
  *
- * The agent sends the node manifest and its identity info. We return
+ * The agent sends the portal URL and its identity info. We return
  * a device code (for polling) and a verification URL (for the user to
  * open in their browser).
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { node_url, node_manifest, agent_info } = body;
+    const { portal_url, agent_info } = body;
 
-    if (!node_url) {
+    if (!portal_url) {
       return NextResponse.json(
-        { error: 'node_url is required' },
+        { error: 'portal_url is required' },
         { status: 400 }
       );
     }
 
-    const record = createDeviceAuth(
-      node_url,
-      node_manifest || {},
-      agent_info || {}
-    );
+    const record = createDeviceAuth(portal_url, {}, agent_info || {});
 
     // RFC 8628 response format
     return NextResponse.json({

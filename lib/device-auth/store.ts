@@ -1,7 +1,7 @@
 /**
  * Device auth code storage with TTL.
  *
- * Implements RFC 8628 device code storage for the "Connect to Node"
+ * Implements RFC 8628 device code storage for the "Acquire a License"
  * provisioning flow. Agents initiate a device auth session, users
  * authenticate in the browser, and the provisioned key is delivered
  * back to the agent via polling.
@@ -29,8 +29,8 @@ export interface ProvisionedKey {
 export interface DeviceAuthRecord {
   deviceCode: string; // Opaque secret (agent polls with this)
   userCode: string; // Human-readable code (embedded in verification URL)
-  nodeUrl: string; // Node the agent wants to connect to
-  nodeManifest: Record<string, unknown>; // From /.well-known/agent.json
+  portalUrl: string; // Portal URL the agent is connecting through
+  nodeManifest: Record<string, unknown>; // Additional metadata
   agentInfo: DeviceAuthAgentInfo;
   status: 'pending' | 'authorized' | 'provisioned' | 'expired' | 'denied';
   userId?: string; // Set after OAuth
@@ -101,7 +101,7 @@ function startCleanup() {
  * Create a new device auth session.
  */
 export function createDeviceAuth(
-  nodeUrl: string,
+  portalUrl: string,
   nodeManifest: Record<string, unknown>,
   agentInfo: DeviceAuthAgentInfo
 ): DeviceAuthRecord {
@@ -111,7 +111,7 @@ export function createDeviceAuth(
   const record: DeviceAuthRecord = {
     deviceCode: generateDeviceCode(),
     userCode: generateUserCode(),
-    nodeUrl,
+    portalUrl,
     nodeManifest,
     agentInfo,
     status: 'pending',
@@ -189,7 +189,7 @@ export function consumeProvisionedKey(deviceCode: string):
   | {
       key: ProvisionedKey;
       agentRecord: DeviceAuthRecord['agentRecord'];
-      nodeUrl: string;
+      portalUrl: string;
       packageDownloadUrl?: string;
     }
   | undefined {
@@ -201,7 +201,7 @@ export function consumeProvisionedKey(deviceCode: string):
   const result = {
     key: record.provisionedKey,
     agentRecord: record.agentRecord,
-    nodeUrl: record.nodeUrl,
+    portalUrl: record.portalUrl,
     packageDownloadUrl: record.packageDownloadUrl,
   };
 

@@ -58,7 +58,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       user_code: record.userCode,
-      node_url: record.nodeUrl,
+      portal_url: record.portalUrl,
       node_manifest: record.nodeManifest,
       agent_info: record.agentInfo,
       status: record.status,

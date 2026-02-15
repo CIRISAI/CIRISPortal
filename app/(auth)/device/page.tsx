@@ -17,7 +17,7 @@ import type { AllowedTemplate } from '@/lib/device-auth/abac';
 
 interface DeviceLookupResponse {
   user_code: string;
-  node_url: string;
+  portal_url: string;
   node_manifest: Record<string, unknown>;
   agent_info: {
     agentHash?: string;
@@ -150,7 +150,7 @@ function DeviceAuthFlow() {
           <CardContent>
             <p className="text-sm text-gray-500">
               This page should be opened from the link provided by your agent
-              during the &quot;Connect to Node&quot; setup flow.
+              during the &quot;Acquire a License&quot; setup flow.
             </p>
             <p className="mt-4 text-sm text-gray-500">
               If you have a code, append it to the URL:
@@ -274,16 +274,16 @@ function DeviceAuthFlow() {
         {/* Node Info */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Node Connection</CardTitle>
+            <CardTitle className="text-lg">Agent Provisioning</CardTitle>
             <CardDescription>
-              An agent is requesting to connect to the following node.
+              An agent is requesting to acquire a license via this portal.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <span className="font-medium text-gray-500">Node URL</span>
-                <p className="text-gray-900">{deviceData.node_url}</p>
+                <span className="font-medium text-gray-500">Portal URL</span>
+                <p className="text-gray-900">{deviceData.portal_url}</p>
               </div>
               <div>
                 <span className="font-medium text-gray-500">Code</span>

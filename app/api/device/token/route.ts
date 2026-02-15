@@ -84,7 +84,7 @@ export async function POST(request: Request) {
                 approved_adapters: result.agentRecord.approvedAdapters,
               }
             : undefined,
-          node_url: result.nodeUrl,
+          portal_url: result.portalUrl,
           // Licensed package info — agent downloads this zip after provisioning
           licensed_package:
             templateId && isLicensedTemplate(templateId)
