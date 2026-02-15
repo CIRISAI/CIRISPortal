@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import {
   getByUserCode,
   updateRecord,
@@ -30,7 +31,7 @@ import crypto from 'crypto';
 export async function POST(request: Request) {
   try {
     // Verify user is authenticated
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -64,10 +65,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Resolve user's org from session
-    // TODO: Look up org from session user email via Registry.
-    // MVP: use the orgId from the session if available, or a default.
-    const orgId = (session.user as any).orgId || 'community';
+    // Resolve user's org from session (set by JWT callback during login)
+    const orgId = (session.user as any).orgId;
+    if (!orgId) {
+      return NextResponse.json(
+        {
+          error:
+            'No organization found for user. Please contact an administrator.',
+        },
+        { status: 403 }
+      );
+    }
 
     // Verify template is allowed by ABAC
     const allowed = await getAllowedTemplates(orgId, record.nodeManifest);
