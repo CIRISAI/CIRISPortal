@@ -23,6 +23,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_REGISTRY_API_URL=/api/registry
 
+# Build-time only: dummy values so Next.js static page collection
+# doesn't fail on auth route validation. Real values injected at runtime.
+ENV APP_ENV=build
+ENV NEXTAUTH_SECRET=build-time-placeholder-not-used-at-runtime
+
 # Build the application
 RUN npm run build
 
