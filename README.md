@@ -1,33 +1,36 @@
-# CIRISPortal - Partner & Organization Management
+# CIRISPortal - Registry Administration
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-Administrative portal for the CIRIS ecosystem, deployed at **portal.ciris.ai**.
+Administrative portal for the CIRIS ecosystem. Live at **[portal.ciris.ai](https://portal.ciris.ai)**.
 
 ## Overview
 
-CIRISPortal provides:
+CIRISPortal is the web interface for managing the CIRIS trust registry. It connects to CIRISRegistry via gRPC and provides:
 
-- **Organization Onboarding** - Create and manage partner organizations
-- **User Management** - Invite users, assign roles (Admin, Partner Admin, User)
-- **Agent Registry** - Register and manage AI agents in the CIRIS ecosystem
-- **Key Custody** - Generate and manage cryptographic signing keys for partners
-- **License Management** - View partner licenses and capability grants
-- **Emergency Controls** - Mass revocation, emergency shutdown capabilities
-- **Audit Logging** - Cryptographically signed trail of all operations
+- **Organization Management** - Create and manage partner organizations
+- **User Management** - Invite users, assign roles (Admin, Partner, Licensee)
+- **Agent Registry** - Register and track AI agents by SHA-256 hash
+- **Build Registry** - Register builds with Tripwire file integrity manifests (907+ file SHA-256 hashes per build)
+- **License Management** - Issue and manage partner/licensee licenses with capability grants
+- **Key Custody** - Generate Ed25519 keypairs with envelope encryption (AES-256-GCM)
+- **Webhook Management** - Configure event-driven notifications
+- **Incident Response** - Emergency shutdown and mass revocation controls
+- **Compliance** - SOC2/HIPAA/GDPR compliance reporting
+- **Audit Logging** - Complete trail of all administrative operations
 
-This is a static ops tool - no AI, just clean administrative workflows.
+This is a static ops tool — no AI, just clean administrative workflows.
 
 ## Architecture
 
 ```
 portal.ciris.ai (Next.js 15 + Cloudflare Pages)
          │
-         ▼ (gRPC)
-registry.ciris.ai (CIRISRegistry v1.1.0)
+         ▼ (gRPC via @grpc/grpc-js)
+registry.ciris.ai (CIRISRegistry — Rust gRPC)
          │
          ▼
-Cloudflare Workers KV (Encrypted Key Storage)
+PostgreSQL (agents, builds, licenses, keys, audit)
 ```
 
 ## Quick Start
@@ -97,14 +100,23 @@ CIRISPortal/
 │   ├── (auth)/                # Login pages
 │   ├── (dashboard)/           # Protected routes
 │   │   ├── dashboard/         # Overview
-│   │   ├── admin/             # Admin pages (agents, incidents, partners)
+│   │   ├── organizations/     # Organization management
+│   │   ├── users/             # User management
+│   │   ├── partners/          # Licensee management
 │   │   ├── keys/              # Key custody management
-│   │   ├── audit/             # Audit log viewer
 │   │   ├── webhooks/          # Webhook management
-│   │   └── settings/          # Settings
+│   │   ├── audit/             # Audit log viewer
+│   │   ├── compliance/        # Compliance reporting
+│   │   ├── settings/          # Account settings
+│   │   └── admin/             # Admin-only pages
+│   │       ├── agents/        #   Agent registry
+│   │       ├── builds/        #   Build registry (Tripwire manifests)
+│   │       ├── partners/      #   Partner license management
+│   │       ├── system-users/  #   System user management
+│   │       └── incidents/     #   Incident response
 │   └── api/
 │       ├── auth/              # NextAuth routes
-│       ├── admin/             # Admin API (agents, emergency, revoke)
+│       ├── admin/             # Admin API (agents, builds, emergency)
 │       ├── registry/          # Registry API proxy
 │       └── webhooks/          # Webhook API
 ├── components/
@@ -135,26 +147,39 @@ CIRISPortal/
 
 ## Development Status
 
-**Version**: 0.1.0 (January 2026)
+**Version**: 0.1.0 (February 2026) | **Live**: [portal.ciris.ai](https://portal.ciris.ai)
 
 ### Completed
 
-- [x] NextAuth integration (Google OAuth + test credentials)
-- [x] gRPC integration with CIRISRegistry v1.1.0
-- [x] Agent registry management
-- [x] Emergency shutdown controls
-- [x] Mass revocation interface
+- [x] NextAuth integration (Google OAuth + devtest credentials)
+- [x] gRPC integration with CIRISRegistry
+- [x] Organization and user management
+- [x] Agent registry management (register, lookup, revoke)
+- [x] Build registry with Tripwire file integrity manifests
+- [x] License management (issue, view, capability grants)
+- [x] Ed25519 key generation (WebCrypto) with envelope encryption
 - [x] Webhook management
-- [x] License expiry monitoring
+- [x] Emergency shutdown and mass revocation controls
+- [x] Compliance reporting interface
+- [x] Audit log viewer
 - [x] Security headers and API protection
-- [x] Ed25519 key generation (WebCrypto)
-- [x] Envelope encryption implementation
+- [x] Role-based access control (Admin, Partner, Licensee)
+- [x] Cloudflare Pages deployment with production gRPC backend
 
 ### In Progress
 
 - [ ] ML-DSA-65 post-quantum key generation
 - [ ] Full key rotation workflow
-- [ ] Audit log viewer with verification
+- [ ] Audit log cryptographic verification
+
+## CIRIS Ecosystem
+
+| Component         | Purpose                              | URL                                                                      |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| **CIRISPortal**   | Admin web interface (this repo)      | [portal.ciris.ai](https://portal.ciris.ai)                               |
+| **CIRISRegistry** | Trust registry backend               | [registry.ciris.ai](https://registry.ciris.ai)                           |
+| **CIRISVerify**   | Hardware-rooted license verification | [github.com/CIRISAI/CIRISVerify](https://github.com/CIRISAI/CIRISVerify) |
+| **CIRISAgent**    | Ethical AI agent framework           | [github.com/CIRISAI/CIRISAgent](https://github.com/CIRISAI/CIRISAgent)   |
 
 ## License
 
@@ -163,4 +188,5 @@ GNU Affero General Public License v3.0
 ## Contact
 
 - Technical: registry@ciris.ai
+- Security: security@ciris.ai
 - Sales: sales@ciris.ai
