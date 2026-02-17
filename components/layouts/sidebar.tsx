@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   BadgeCheck,
   ShieldCheck,
+  Package,
 } from 'lucide-react';
 
 type NavItem = {
@@ -103,6 +104,12 @@ const adminNavigation: NavItem[] = [
     name: 'Agent Registry',
     href: '/admin/agents',
     icon: Bot,
+    roles: ['admin'],
+  },
+  {
+    name: 'Build Registry',
+    href: '/admin/builds',
+    icon: Package,
     roles: ['admin'],
   },
   {

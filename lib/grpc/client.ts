@@ -730,6 +730,60 @@ export async function getPartnerActivity(params: {
   });
 }
 
+// Build Registry
+export async function registerBuild(params: {
+  version: string;
+  buildHash: string;
+  fileManifestHash: string;
+  fileManifestCount: number;
+  fileManifestJson: string; // JSON string of the manifest
+  includesModules: string[];
+  sourceRepo?: string;
+  sourceCommit?: string;
+  registeredBy?: string;
+  notes?: string;
+}): Promise<any> {
+  return promisifyUnaryAuth(getAdminClient(), 'registerBuild', {
+    context: buildContext(),
+    build: {
+      version: params.version,
+      buildHash: params.buildHash,
+      fileManifestHash: params.fileManifestHash,
+      fileManifestCount: params.fileManifestCount,
+      fileManifestJson: Buffer.from(params.fileManifestJson, 'utf-8'),
+      includesModules: params.includesModules,
+      sourceRepo: params.sourceRepo || '',
+      sourceCommit: params.sourceCommit || '',
+      registeredBy: params.registeredBy || '',
+      notes: params.notes || '',
+    },
+  });
+}
+
+export async function getBuild(params: {
+  version?: string;
+  buildHash?: string;
+}): Promise<any> {
+  return promisifyUnaryAuth(getAdminClient(), 'getBuild', {
+    context: buildContext(),
+    version: params.version || '',
+    buildHash: params.buildHash || '',
+  });
+}
+
+export async function listBuilds(params?: {
+  status?: string;
+  pageSize?: number;
+  pageToken?: string;
+}): Promise<any> {
+  return promisifyUnaryAuth(getAdminClient(), 'listBuilds', {
+    context: buildContext(),
+    status: params?.status || '',
+    pageSize: params?.pageSize || 50,
+    pageToken: params?.pageToken || '',
+  });
+}
+
 // Agent Registry
 export async function listRegisteredAgents(params: {
   agentType?: string;
