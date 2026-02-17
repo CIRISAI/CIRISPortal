@@ -104,7 +104,8 @@ const statusConfig: Record<
  * Format date to relative time or absolute date
  */
 function formatDate(timestamp?: number): string {
-  if (!timestamp) return '-';
+  if (timestamp === undefined || timestamp === null || timestamp <= 0)
+    return '-';
 
   const now = Date.now();
   const diff = now - timestamp;

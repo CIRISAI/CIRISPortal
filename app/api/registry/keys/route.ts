@@ -21,6 +21,49 @@ function bufferToBase64(value: any): string {
 }
 
 /**
+ * Normalize gRPC string enum to numeric KeyStatus value.
+ * proto-loader with `enums: String` returns e.g. "KEY_ACTIVE" not 1.
+ */
+function normalizeKeyStatus(status: any): number {
+  if (typeof status === 'number') return status;
+  const mapping: Record<string, number> = {
+    KEY_STATUS_UNSPECIFIED: 0,
+    KEY_ACTIVE: 1,
+    KEY_ROTATED: 2,
+    KEY_REVOKED: 3,
+    KEY_PENDING: 4,
+    KEY_ESCROWED: 5,
+  };
+  return mapping[String(status)] ?? 0;
+}
+
+/**
+ * Normalize gRPC string enum to numeric KeyCustodyModel value.
+ */
+function normalizeCustodyModel(model: any): number {
+  if (typeof model === 'number') return model;
+  const mapping: Record<string, number> = {
+    KEY_CUSTODY_UNSPECIFIED: 0,
+    CUSTODIED: 1,
+    SELF_SOVEREIGN: 2,
+  };
+  return mapping[String(model)] ?? 0;
+}
+
+/**
+ * Convert gRPC timestamp (string of unix seconds) to JS milliseconds.
+ * Returns undefined for empty/zero timestamps so the UI shows '-'.
+ */
+function toMillis(ts: any): number | undefined {
+  if (ts === null || ts === undefined || ts === '' || ts === '0')
+    return undefined;
+  const val = typeof ts === 'number' ? ts : parseInt(ts);
+  if (!val || val <= 0) return undefined;
+  // Unix seconds are < 1e12, JS milliseconds are >= 1e12
+  return val < 1e12 ? val * 1000 : val;
+}
+
+/**
  * Transform key record to ensure proper encoding
  */
 function transformKeyRecord(key: any): any {
@@ -37,13 +80,13 @@ function transformKeyRecord(key: any): any {
       : undefined,
     ed25519Fingerprint: key.ed25519Fingerprint,
     mlDsa65Fingerprint: key.mlDsa_65Fingerprint || key.mlDsa65Fingerprint,
-    custodyModel: key.custodyModel,
-    status: key.status,
-    createdAt: parseInt(key.createdAt) || 0,
-    activatedAt: parseInt(key.activatedAt) || 0,
-    rotatedAt: parseInt(key.rotatedAt) || 0,
-    revokedAt: parseInt(key.revokedAt) || 0,
-    gracePeriodExpiresAt: parseInt(key.gracePeriodExpiresAt) || 0,
+    custodyModel: normalizeCustodyModel(key.custodyModel),
+    status: normalizeKeyStatus(key.status),
+    createdAt: toMillis(key.createdAt),
+    activatedAt: toMillis(key.activatedAt),
+    rotatedAt: toMillis(key.rotatedAt),
+    revokedAt: toMillis(key.revokedAt),
+    gracePeriodExpiresAt: toMillis(key.gracePeriodExpiresAt),
   };
 }
 
