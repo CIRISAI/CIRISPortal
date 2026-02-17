@@ -388,7 +388,7 @@ function RegisterAgentDialog() {
       <DialogTrigger asChild>
         <Button data-testid="register-agent-btn">
           <Plus className="mr-2 h-4 w-4" />
-          Register Agent
+          Issue License
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -396,9 +396,9 @@ function RegisterAgentDialog() {
         data-testid="register-agent-dialog"
       >
         <DialogHeader>
-          <DialogTitle>Register New Agent</DialogTitle>
+          <DialogTitle>Issue Agent License</DialogTitle>
           <DialogDescription>
-            Add a new agent build to the registry
+            License a new agent version for deployment
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 overflow-y-auto py-4 pr-1">
@@ -643,7 +643,7 @@ function RegisterAgentDialog() {
                 )}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Adapters this agent build is permitted to load at runtime
+                Adapters this agent is permitted to load at runtime
               </p>
               <div className="max-h-48 overflow-y-auto rounded-md border p-3">
                 {Array.from(new Set(KNOWN_ADAPTERS.map((a) => a.category))).map(
@@ -744,10 +744,10 @@ function RegisterAgentDialog() {
             {registerMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Registering...
+                Issuing...
               </>
             ) : (
-              'Register Agent'
+              'Issue License'
             )}
           </Button>
         </DialogFooter>
@@ -1273,7 +1273,7 @@ export default function AdminAgentsPage() {
             Agent Registry
           </h1>
           <p className="text-muted-foreground">
-            Manage registered agent builds and attestations
+            Manage licensed agent versions and attestations
           </p>
         </div>
         <div className="flex gap-2">
