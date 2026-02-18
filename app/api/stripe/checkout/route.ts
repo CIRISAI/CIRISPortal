@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import {
   createActivationCheckout,
-  createSubscriptionCheckout,
   getCustomerByEmail,
   createCustomer,
 } from '@/lib/stripe/service';
@@ -92,21 +91,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (type === 'subscription') {
-      if (tier === 'community') {
-        return NextResponse.json(
-          { error: 'Community tier has no subscription' },
-          { status: 400 }
-        );
-      }
-
-      const checkoutSession = await createSubscriptionCheckout(
-        customer.id,
-        tier,
-        `${baseUrl}/dashboard?upgraded=true`,
-        `${baseUrl}/pricing?canceled=true`
+      // Paid tier subscriptions are not available for self-service during early access.
+      // Contact sales@ciris.ai for Professional, Enterprise, and Safety-Critical tiers.
+      return NextResponse.json(
+        {
+          error:
+            'Paid tier subscriptions are not yet available for self-service. Please contact sales@ciris.ai for upgrade inquiries.',
+        },
+        { status: 403 }
       );
-
-      return NextResponse.json({ url: checkoutSession.url });
     }
 
     return NextResponse.json(

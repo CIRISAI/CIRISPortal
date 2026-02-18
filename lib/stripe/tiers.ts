@@ -72,7 +72,7 @@ export const TIER_DEFINITIONS: Record<TierName, TierDefinition> = {
       'Formal attestation support',
       'Audit log anchoring',
       'Compliance documentation (SOC2/HIPAA/GDPR)',
-      'License revocation guarantees',
+      'License revocation support',
       'Incident investigation support',
     ],
   },
@@ -83,7 +83,7 @@ export const TIER_DEFINITIONS: Record<TierName, TierDefinition> = {
     agentLimit: null,
     label: 'Safety-Critical',
     features: [
-      'Liability backing',
+      'Enhanced accountability framework',
       'Forensic audit support',
       'Regulatory compliance certification',
       'Dedicated steward identity anchoring',

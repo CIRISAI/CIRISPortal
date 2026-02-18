@@ -185,10 +185,10 @@ export default function SettingsPage() {
               {userRole === 'community' && (
                 <a
                   data-testid="btn-upgrade-tier"
-                  href="/pricing"
+                  href="mailto:sales@ciris.ai?subject=Tier%20Upgrade%20Inquiry"
                   className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
                 >
-                  Upgrade Tier
+                  Contact Sales to Upgrade
                 </a>
               )}
               <button

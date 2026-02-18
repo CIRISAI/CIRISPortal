@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import {
   TIER_DEFINITIONS,
   formatCents,
@@ -16,44 +15,15 @@ const TIER_ORDER: TierName[] = [
 ];
 
 export default function PricingPage() {
-  const [loadingTier, setLoadingTier] = useState<TierName | null>(null);
-
   // TODO: Get actual current tier from session/org metadata
   const currentTier: TierName = 'community';
 
-  const handleUpgrade = async (tier: TierName) => {
-    if (tier === 'safety_critical') {
-      // Custom pricing — contact sales
-      window.location.href =
-        'mailto:licensing@ciris.ai?subject=Safety-Critical%20License%20Inquiry';
-      return;
-    }
-
-    setLoadingTier(tier);
-    try {
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'subscription',
-          tier,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Checkout failed');
-      }
-
-      const { url } = await response.json();
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (error) {
-      console.error('Checkout error:', error);
-    } finally {
-      setLoadingTier(null);
-    }
+  const handleUpgrade = (tier: TierName) => {
+    // All paid tiers require contacting sales during early access
+    const subject = encodeURIComponent(
+      `${TIER_DEFINITIONS[tier].label} Tier Inquiry`
+    );
+    window.location.href = `mailto:sales@ciris.ai?subject=${subject}`;
   };
 
   return (
@@ -175,14 +145,9 @@ export default function PricingPage() {
                   <button
                     data-testid={`btn-upgrade-${tierName}`}
                     onClick={() => handleUpgrade(tierName)}
-                    disabled={loadingTier === tierName}
-                    className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                    className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
                   >
-                    {loadingTier === tierName
-                      ? 'Redirecting...'
-                      : tierName === 'safety_critical'
-                        ? 'Contact Sales'
-                        : 'Upgrade'}
+                    Contact Sales
                   </button>
                 ) : (
                   <button
@@ -225,8 +190,8 @@ export default function PricingPage() {
             </h3>
             <p className="text-sm text-gray-600">
               Paid tiers include steward-backed verification, compliance
-              documentation, and accountability guarantees. You&apos;re not
-              paying for capability &mdash; you&apos;re paying for
+              documentation, and enhanced accountability support. You&apos;re
+              not paying for capability &mdash; you&apos;re paying for
               accountability.
             </p>
           </div>

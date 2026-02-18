@@ -75,7 +75,7 @@ export function TierIndicator({
       {showUpgrade && tier === 'community' && (
         <a
           data-testid="btn-sidebar-upgrade"
-          href="/pricing"
+          href="mailto:sales@ciris.ai?subject=Tier%20Upgrade%20Inquiry"
           className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline"
         >
           Upgrade
