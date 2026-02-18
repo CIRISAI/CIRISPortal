@@ -1,37 +1,43 @@
-# CIRISPortal - Registry Administration
+# CIRISPortal
+
+**The DMV Clerk's Window — Where Administrators Manage Agent Identity, Integrity, and Licensing**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-Administrative portal for the CIRIS ecosystem. Live at **[portal.ciris.ai](https://portal.ciris.ai)**.
+Live at **[portal.ciris.ai](https://portal.ciris.ai)**.
 
 ## Overview
 
-CIRISPortal is the web interface for managing the CIRIS trust registry. It connects to CIRISRegistry via gRPC and provides:
+If CIRISRegistry is the **DMV database** and CIRISVerify is the **DMV office** that checks your documents, CIRISPortal is the **clerk's window** — the web interface where administrators issue driver's licenses, register vehicles, and manage insurance records for AI agents.
 
-- **Organization Management** - Create and manage partner organizations
-- **User Management** - Invite users, assign roles (Admin, Partner, Licensee)
-- **Agent Registry** - Register and track AI agents by SHA-256 hash
-- **Build Registry** - Register builds with Tripwire file integrity manifests (907+ file SHA-256 hashes per build)
-- **License Management** - Issue and manage partner/licensee licenses with capability grants
-- **Key Custody** - Generate Ed25519 keypairs with envelope encryption (AES-256-GCM)
-- **Webhook Management** - Configure event-driven notifications
-- **Incident Response** - Emergency shutdown and mass revocation controls
-- **Compliance** - SOC2/HIPAA/GDPR compliance reporting
-- **Audit Logging** - Complete trail of all administrative operations
+CIRISPortal connects to CIRISRegistry via gRPC and provides:
+
+- **Agent Registry** — Register and track AI agents by SHA-256 hash (issuing driver's licenses)
+- **Build Registry** — Register builds with Tripwire file integrity manifests, 907+ file SHA-256 hashes per build (vehicle registration and VIN records)
+- **License Management** — Issue and manage partner/licensee licenses with capability grants (insurance policies — who is responsible, what they're authorized to do)
+- **Organization Management** — Create and manage partner organizations
+- **User Management** — Invite users, assign roles (Admin, Partner, Licensee)
+- **Key Custody** — Generate Ed25519 keypairs with envelope encryption (AES-256-GCM)
+- **Webhook Management** — Configure event-driven notifications
+- **Incident Response** — Emergency shutdown and mass revocation controls (suspending licenses, recalling registrations)
+- **Compliance** — SOC2/HIPAA/GDPR compliance reporting
+- **Audit Logging** — Complete trail of all administrative operations
 
 This is a static ops tool — no AI, just clean administrative workflows.
 
 ## Architecture
 
 ```
-portal.ciris.ai (Next.js 15 + Cloudflare Pages)
+portal.ciris.ai (Next.js 15 + Docker/Watchtower)
          │
          ▼ (gRPC via @grpc/grpc-js)
-registry.ciris.ai (CIRISRegistry — Rust gRPC)
+*.registry.ciris-services-1.ai (CIRISRegistry — Rust gRPC)
          │
          ▼
 PostgreSQL (agents, builds, licenses, keys, audit)
 ```
+
+Production deployment uses Docker with Watchtower for automatic updates.
 
 ## Quick Start
 
@@ -79,18 +85,23 @@ See `.env.example` for full documentation. Key variables:
 
 ## Deployment
 
-### Cloudflare Pages
+### Docker + Watchtower (Production)
+
+Production deployment at portal.ciris.ai uses Docker with Watchtower for automatic image updates:
 
 ```bash
-# Set secrets
-wrangler secret put NEXTAUTH_SECRET --env production
-wrangler secret put GOOGLE_CLIENT_ID --env production
-wrangler secret put GOOGLE_CLIENT_SECRET --env production
-wrangler secret put KEY_ENCRYPTION_KEY --env production
+# Build production image
+docker build -t cirisportal:latest .
 
-# Deploy
-npm run deploy
+# Run with environment
+docker run -d \
+  --name cirisportal \
+  --env-file .env.production \
+  -p 3000:3000 \
+  cirisportal:latest
 ```
+
+Watchtower monitors the container and automatically pulls updated images.
 
 ## Project Structure
 
@@ -164,7 +175,7 @@ CIRISPortal/
 - [x] Audit log viewer
 - [x] Security headers and API protection
 - [x] Role-based access control (Admin, Partner, Licensee)
-- [x] Cloudflare Pages deployment with production gRPC backend
+- [x] Docker + Watchtower deployment with production gRPC backend
 
 ### In Progress
 
@@ -174,12 +185,12 @@ CIRISPortal/
 
 ## CIRIS Ecosystem
 
-| Component         | Purpose                              | URL                                                                      |
-| ----------------- | ------------------------------------ | ------------------------------------------------------------------------ |
-| **CIRISPortal**   | Admin web interface (this repo)      | [portal.ciris.ai](https://portal.ciris.ai)                               |
-| **CIRISRegistry** | Trust registry backend               | [registry.ciris.ai](https://registry.ciris.ai)                           |
-| **CIRISVerify**   | Hardware-rooted license verification | [github.com/CIRISAI/CIRISVerify](https://github.com/CIRISAI/CIRISVerify) |
-| **CIRISAgent**    | Ethical AI agent framework           | [github.com/CIRISAI/CIRISAgent](https://github.com/CIRISAI/CIRISAgent)   |
+| Component         | Purpose                               | URL                                                                      |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| **CIRISPortal**   | Admin web interface (this repo)       | [portal.ciris.ai](https://portal.ciris.ai)                               |
+| **CIRISRegistry** | Trust registry backend (DMV database) | `*.registry.ciris-services-1.ai`                                         |
+| **CIRISVerify**   | Hardware-rooted license verification  | [github.com/CIRISAI/CIRISVerify](https://github.com/CIRISAI/CIRISVerify) |
+| **CIRISAgent**    | Ethical AI agent framework            | [github.com/CIRISAI/CIRISAgent](https://github.com/CIRISAI/CIRISAgent)   |
 
 ## License
 

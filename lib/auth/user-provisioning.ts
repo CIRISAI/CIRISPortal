@@ -21,7 +21,7 @@ import {
  * - partner: Organization admins who manage licensees
  * - licensee: End users with read-only access to their org
  */
-export type UserRole = 'admin' | 'partner' | 'licensee';
+export type UserRole = 'admin' | 'partner' | 'licensee' | 'community';
 
 /**
  * OrgRole enum values from proto (must match ciris_registry.proto)
@@ -330,6 +330,116 @@ async function getOrCreateOrganization(
 }
 
 /**
+ * Get or create a COMMUNITY organization for self-signup users.
+ * Unlike partner/internal orgs, community orgs:
+ * - Have orgType ORG_COMMUNITY
+ * - Are restricted to community templates (echo, default)
+ * - Have tier metadata for Stripe integration
+ */
+async function getOrCreateCommunityOrganization(
+  domain: string,
+  primaryEmail: string
+): Promise<{ orgId: string; orgName: string; isNew: boolean }> {
+  const slugId = domainToOrgId(domain);
+
+  // Check if a community org already exists for this domain
+  const existingOrg = await findOrgByDomain(domain);
+  if (existingOrg) {
+    console.log(
+      `[Provisioning] Found existing community org: ${existingOrg.orgId}`
+    );
+    return {
+      orgId: existingOrg.orgId,
+      orgName: existingOrg.orgName,
+      isNew: false,
+    };
+  }
+
+  // Create a new community org
+  const orgName = `${domain} (Community)`;
+
+  try {
+    const createResponse = await createOrganization({
+      organization: {
+        orgId: slugId,
+        name: orgName,
+        primaryEmail,
+        oauthProvider: 'google',
+        oauthDomain: domain,
+        orgType: 'ORG_COMMUNITY',
+        active: true,
+        metadata: {
+          autoCreated: 'true',
+          selfSignup: 'true',
+          tier: 'community',
+          activationStatus: 'pending',
+          createdAt: new Date().toISOString(),
+        },
+      },
+      initialAdmin: {
+        email: primaryEmail,
+        name: primaryEmail.split('@')[0],
+        role: 1, // ORG_ADMIN
+        active: true,
+      },
+    });
+
+    if (createResponse.error) {
+      const errorMsg = createResponse.error.message || '';
+      if (
+        errorMsg.includes('duplicate') ||
+        errorMsg.includes('already exists')
+      ) {
+        const existing = await findOrgByDomain(domain);
+        if (existing) {
+          return {
+            orgId: existing.orgId,
+            orgName: existing.orgName,
+            isNew: false,
+          };
+        }
+      }
+      throw new ProvisioningError(
+        `Failed to create community organization: ${errorMsg}`,
+        'ORG_CREATE_FAILED',
+        true
+      );
+    }
+
+    const actualOrgId =
+      createResponse.orgId || createResponse.organization?.orgId || slugId;
+    console.log(
+      `[Provisioning] Created community org: ${actualOrgId} for ${domain}`
+    );
+    return { orgId: actualOrgId, orgName, isNew: true };
+  } catch (error) {
+    if (error instanceof ProvisioningError) throw error;
+
+    const err = error as { message?: string };
+    if (
+      err.message?.includes('duplicate') ||
+      err.message?.includes('already exists')
+    ) {
+      const existing = await findOrgByDomain(domain);
+      if (existing) {
+        return {
+          orgId: existing.orgId,
+          orgName: existing.orgName,
+          isNew: false,
+        };
+      }
+    }
+
+    console.error('[Provisioning] Error creating community org:', error);
+    throw new ProvisioningError(
+      `Failed to create community organization for ${domain}`,
+      'ORG_CREATE_FAILED',
+      true
+    );
+  }
+}
+
+/**
  * Get or create user in organization
  */
 async function getOrCreateUser(
@@ -532,17 +642,22 @@ export async function provisionUser(
     orgName = orgResult.orgName;
     isNewOrg = orgResult.isNew;
   } else {
-    // Non-CIRIS user not found in any org
-    throw new ProvisioningError(
-      `User ${email} not found in any organization`,
-      'USER_NOT_FOUND',
-      false
+    // Non-CIRIS user not found in any org → auto-create community org
+    console.log(
+      `[Provisioning] Auto-creating community org for ${email} (domain: ${domain})`
     );
+    const orgResult = await getOrCreateCommunityOrganization(domain, email);
+    orgId = orgResult.orgId;
+    orgName = orgResult.orgName;
+    isNewOrg = orgResult.isNew;
   }
 
   // Determine default role for new users
-  // CIRIS internal users get admin, everyone else gets licensee
-  const defaultRole: UserRole = isCirisInternal ? 'admin' : 'licensee';
+  const defaultRole: UserRole = isCirisInternal
+    ? 'admin'
+    : existingUser.exists
+      ? 'licensee'
+      : 'community';
 
   // Get or create user in the org
   const {

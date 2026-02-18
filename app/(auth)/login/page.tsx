@@ -92,7 +92,9 @@ function LoginForm() {
           <h1 className="mb-2 text-3xl font-bold text-gray-900">
             CIRIS<span className="text-emerald-600">Portal</span>
           </h1>
-          <p className="text-gray-600">Sign in to access the admin portal</p>
+          <p className="text-gray-600">
+            Sign in to manage your agent identities
+          </p>
           {isDevTest && (
             <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
               Development Mode
@@ -132,6 +134,32 @@ function LoginForm() {
           </svg>
           Continue with Google
         </button>
+
+        {/* Community tier info */}
+        {!isDevTest && (
+          <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
+            <p className="text-center text-sm font-medium text-emerald-800">
+              Get started with a Community identity
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-emerald-700">
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-500">&#10003;</span>
+                Hardware-bound agent identity
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-500">&#10003;</span>
+                Basic registry verification
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-500">&#10003;</span>
+                Echo &amp; Default templates
+              </li>
+            </ul>
+            <p className="mt-3 text-center text-xs text-gray-500">
+              $0.50 issuance fee + $1.00 refundable identity bond
+            </p>
+          </div>
+        )}
 
         {/* DevTest: Test User Options */}
         {isDevTest && (

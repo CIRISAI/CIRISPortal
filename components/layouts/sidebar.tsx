@@ -19,7 +19,10 @@ import {
   BadgeCheck,
   ShieldCheck,
   Package,
+  CreditCard,
 } from 'lucide-react';
+import { TierIndicator } from '@/components/ui/tier-badge';
+import type { TierName } from '@/lib/stripe/tiers';
 
 type NavItem = {
   name: string;
@@ -77,6 +80,12 @@ const navigation: NavItem[] = [
     href: '/compliance',
     icon: FileCheck,
     roles: ['admin', 'partner'], // Admin and Partner
+  },
+  {
+    name: 'Pricing',
+    href: '/pricing',
+    icon: CreditCard,
+    // All roles can view pricing/upgrade
   },
   {
     name: 'Account',
@@ -138,6 +147,12 @@ function getRoleBadge(role: string) {
       return (
         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
           Licensee
+        </span>
+      );
+    case 'community':
+      return (
+        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          Community
         </span>
       );
     default:
@@ -234,7 +249,16 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="border-t p-4">
+      <div className="space-y-2 border-t p-4">
+        {/* Tier indicator */}
+        <TierIndicator
+          tier={
+            (userRole === 'community'
+              ? 'community'
+              : 'professional') as TierName
+          }
+          showUpgrade={userRole === 'community'}
+        />
         <div className="text-xs text-gray-500">
           Version 0.1.0
           <br />

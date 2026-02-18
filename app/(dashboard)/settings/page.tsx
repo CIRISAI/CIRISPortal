@@ -1,10 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { User, Building2, Shield, LogOut } from 'lucide-react';
+import { User, Building2, Shield, LogOut, CreditCard } from 'lucide-react';
+import { TierBadge } from '@/components/ui/tier-badge';
+import type { TierName } from '@/lib/stripe/tiers';
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const [portalLoading, setPortalLoading] = useState(false);
   // @ts-expect-error - extended session type
   const userRole = session?.user?.role || 'unknown';
   // @ts-expect-error - extended session type
@@ -133,10 +137,78 @@ export default function SettingsPage() {
                     <li>View assigned keys</li>
                   </ul>
                 )}
-                {!['admin', 'partner', 'licensee'].includes(userRole) && (
-                  <span className="text-gray-400">Unknown role</span>
+                {userRole === 'community' && (
+                  <ul className="list-inside list-disc space-y-1">
+                    <li>Agent identity issuance</li>
+                    <li>Basic verification</li>
+                    <li>Echo &amp; Default templates</li>
+                  </ul>
                 )}
+                {!['admin', 'partner', 'licensee', 'community'].includes(
+                  userRole
+                ) && <span className="text-gray-400">Unknown role</span>}
               </dd>
+            </div>
+          </div>
+        </div>
+
+        {/* Billing & Tier */}
+        <div className="rounded-lg border bg-white p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="rounded-lg bg-emerald-100 p-2">
+              <CreditCard className="h-5 w-5 text-emerald-600" />
+            </div>
+            <h2 className="text-lg font-semibold">Billing & Tier</h2>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <dt className="text-sm font-medium text-gray-500">
+                Current Tier
+              </dt>
+              <dd className="mt-1">
+                <TierBadge
+                  tier={
+                    (userRole === 'community'
+                      ? 'community'
+                      : 'professional') as TierName
+                  }
+                  size="md"
+                />
+              </dd>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              {userRole === 'community' && (
+                <a
+                  href="/pricing"
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                >
+                  Upgrade Tier
+                </a>
+              )}
+              <button
+                onClick={async () => {
+                  setPortalLoading(true);
+                  try {
+                    const res = await fetch('/api/stripe/portal', {
+                      method: 'POST',
+                    });
+                    if (res.ok) {
+                      const { url } = await res.json();
+                      if (url) window.location.href = url;
+                    }
+                  } catch {
+                    // Stripe not configured or no billing account
+                  } finally {
+                    setPortalLoading(false);
+                  }
+                }}
+                disabled={portalLoading}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {portalLoading ? 'Loading...' : 'Manage Billing'}
+              </button>
             </div>
           </div>
         </div>

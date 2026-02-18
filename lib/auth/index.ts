@@ -322,17 +322,18 @@ export const authOptions: NextAuthOptions = {
       }
 
       // For other domains, check if user exists in registry
-      // (must be pre-added by an admin)
+      // If not found, allow self-signup as community tier
       const result = await checkUserExists(email);
       if (!result.exists) {
-        console.warn(
-          `[Auth] Rejected login: ${email} not found in registry (must be pre-added)`
+        console.log(
+          `[Auth] Community self-signup: ${email} will be auto-provisioned`
         );
-        return false;
+        // Allow login — provisionUser() will auto-create community org
+        return true;
       }
 
       console.log(
-        `[Auth] Allowing login for pre-registered user: ${email} in org ${result.orgId}`
+        `[Auth] Allowing login for registered user: ${email} in org ${result.orgId}`
       );
       return true;
     },

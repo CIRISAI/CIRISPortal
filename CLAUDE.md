@@ -248,6 +248,89 @@ When encountering bugs or issues with the portal, **do not attempt to fix CIRISR
 2. Report to the owning org (CIRISRegistry team for backend issues, CIRISPortal team for frontend)
 3. Apply workarounds if available while waiting for fixes
 
+## Stripe Billing Integration
+
+CIRISPortal includes Stripe-based billing for identity activation and assurance tier subscriptions. The billing code lives in `lib/stripe/`.
+
+### Pricing Model
+
+Identity activation uses a two-part cost for Sybil resistance:
+
+1. **Issuance fee** (non-refundable) — covers registry infrastructure, prevents identity churn
+2. **Identity bond** (refundable) — accountability anchor, returned on proper decommission
+
+Community tier distinguishes **CIRIS agents** (built on the CIRIS framework) from **Non-CIRIS agents** (third-party agents using the CIRIS identity system). Both cost the same but are tracked as separate Stripe products.
+
+| Tier            | Issuance Fee | Identity Bond | Monthly/Agent | Total Activation |
+| --------------- | ------------ | ------------- | ------------- | ---------------- |
+| Community       | $0.50        | $1.00         | Free          | $1.50            |
+| Professional    | $5.00        | $10.00        | $10/mo        | $15.00           |
+| Enterprise      | $25.00       | $100.00       | $100/mo       | $125.00          |
+| Safety-Critical | $250.00      | $1,000.00     | Custom        | $1,250.00        |
+
+### Stripe Product Catalog (CIRIS L3C account)
+
+All products are in the CIRIS L3C Stripe account. Product IDs and price IDs for reference:
+
+**Activation Products (one-time):**
+
+| Product                                       | Price   | Product ID            | Price ID                         |
+| --------------------------------------------- | ------- | --------------------- | -------------------------------- |
+| CIRIS Agent Identity Issuance - Community     | $0.50   | `prod_U01iZuUFQSlPo7` | `price_1T21eqD6B7ILDjd5C8iHI7pw` |
+| Non-CIRIS Agent Identity Issuance - Community | $0.50   | `prod_U01mpLgxsnnv8k` | `price_1T21jCD6B7ILDjd5WqNivC5x` |
+| CIRIS Agent Identity Bond - Community         | $1.00   | `prod_U01ou6EThvQuGU` | `price_1T21kwD6B7ILDjd5XptA9cog` |
+| Non-CIRIS Agent Identity Bond - Community     | $1.00   | `prod_U027IZgEsDSKNd` | `price_1T222sD6B7ILDjd5npLTxLfT` |
+| CIRIS Agent Identity Issuance - Professional  | $5.00   | `prod_U01tpykUBs3jwH` | `price_1T21pYD6B7ILDjd5epdFRNiA` |
+| CIRIS Agent Identity Bond - Professional      | $10.00  | `prod_U0299biZzn1kNl` | `price_1T225LD6B7ILDjd5aosiB7G5` |
+| CIRIS Agent Identity Issuance - Enterprise    | $25.00  | `prod_U02B4FFUVPkCom` | `price_1T226tD6B7ILDjd5TvqpGGxy` |
+| CIRIS Agent Identity Bond - Enterprise        | $100.00 | `prod_U02CSpvnSuNgj6` | `price_1T228OD6B7ILDjd58XMMLu63` |
+
+**Subscription Products (recurring assurance):**
+
+| Product                      | Price      | Product ID            | Price ID                         |
+| ---------------------------- | ---------- | --------------------- | -------------------------------- |
+| CIRIS Professional Assurance | $10.00/mo  | `prod_U02DvFOlJXdtGi` | `price_1T229WD6B7ILDjd5zbseJIvj` |
+| CIRIS Enterprise Assurance   | $100.00/mo | `prod_U01xhEJuxMsLxC` | `price_1T21tOD6B7ILDjd5Dv21MlWQ` |
+
+### Stripe Files
+
+| File                                | Purpose                                                       |
+| ----------------------------------- | ------------------------------------------------------------- |
+| `lib/stripe/service.ts`             | Stripe SDK wrapper (customer, checkout, refund, subscription) |
+| `lib/stripe/config.ts`              | Environment variable accessor for Stripe keys and price IDs   |
+| `lib/stripe/tiers.ts`               | Tier definitions (prices in cents, features, agent limits)    |
+| `app/api/stripe/webhook/route.ts`   | Stripe webhook handler (payment events)                       |
+| `app/api/stripe/checkout/route.ts`  | Checkout session creation (activation + subscription)         |
+| `app/api/stripe/portal/route.ts`    | Customer billing portal session                               |
+| `app/(dashboard)/pricing/page.tsx`  | Tier comparison / upgrade page                                |
+| `app/(dashboard)/activate/page.tsx` | Post-signup activation payment page                           |
+| `components/ui/tier-badge.tsx`      | Tier badge and indicator components                           |
+
+### Secrets Required (backend team)
+
+The following secrets must be set in production (via `wrangler secret put` or equivalent):
+
+| Secret                  | Where to get it                                          |
+| ----------------------- | -------------------------------------------------------- |
+| `STRIPE_SECRET_KEY`     | Stripe Dashboard > Developers > API keys (`sk_live_...`) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard > Developers > Webhooks (`whsec_...`)   |
+
+The price IDs above are test-mode IDs. For production, create corresponding live-mode products in Stripe and set these env vars:
+
+```
+STRIPE_PRICE_ISSUANCE_COMMUNITY=price_...
+STRIPE_PRICE_BOND_COMMUNITY=price_...
+STRIPE_PRICE_ISSUANCE_PRO=price_...
+STRIPE_PRICE_BOND_PRO=price_...
+STRIPE_PRICE_ISSUANCE_ENTERPRISE=price_...
+STRIPE_PRICE_BOND_ENTERPRISE=price_...
+STRIPE_PRICE_ID_PRO=price_...
+STRIPE_PRICE_ID_ENTERPRISE=price_...
+STRIPE_PRODUCT_ID_SAFETY=prod_...
+```
+
+For Non-CIRIS community products, additional env vars are needed (see `.env.example`).
+
 ## Related Projects
 
 | Project           | Purpose                             |
