@@ -14,16 +14,30 @@ import {
  * Community users pay $1.50 per agent identity ($0.50 issuance + $1.00 bond).
  * Each activation generates one key. Users can activate up to 5 identities.
  * Bond is forfeited on revocation; admin can manually refund via Stripe.
+ *
+ * Collects a public contact email (may differ from OAuth email) and requires
+ * explicit acknowledgment of terms before proceeding to checkout.
  */
 export default function ActivatePage() {
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [publicEmail, setPublicEmail] = useState(session?.user?.email || '');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const tier = TIER_DEFINITIONS.community;
   const totalCost = getActivationCost('community');
 
   const handleActivate = async () => {
+    if (!termsAccepted) {
+      setError('You must accept the terms to continue.');
+      return;
+    }
+    if (!publicEmail || !publicEmail.includes('@')) {
+      setError('A valid public contact email is required.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -40,6 +54,7 @@ export default function ActivatePage() {
           type: 'activation',
           tier: 'community',
           hardwareKeyHash,
+          publicEmail,
         }),
       });
 
@@ -110,6 +125,51 @@ export default function ActivatePage() {
             </ul>
           </div>
 
+          {/* Public contact email */}
+          <div className="mb-6">
+            <label
+              htmlFor="public-email"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Public Contact Email
+            </label>
+            <p className="mb-2 text-xs text-gray-500">
+              This email will be publicly visible in the CIRIS Registry as the
+              contact for your agent identity. It may differ from your sign-in
+              email. Anyone querying the registry can see this address.
+            </p>
+            <input
+              data-testid="input-public-email"
+              type="email"
+              id="public-email"
+              value={publicEmail}
+              onChange={(e) => setPublicEmail(e.target.value)}
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder="contact@example.com"
+              required
+            />
+          </div>
+
+          {/* What is publicly visible */}
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h3 className="mb-2 text-sm font-semibold text-amber-900">
+              What is publicly visible
+            </h3>
+            <ul className="space-y-1 text-xs text-amber-800">
+              <li>&#8226; Your public contact email (above)</li>
+              <li>&#8226; Organization name and domain</li>
+              <li>
+                &#8226; Agent identity hash, status, and registration date
+              </li>
+              <li>&#8226; Public key fingerprints</li>
+              <li>&#8226; Identity template type (e.g., echo, default)</li>
+            </ul>
+            <p className="mt-2 text-xs text-amber-700">
+              Private keys, capabilities, adapters, and your sign-in email are{' '}
+              <strong>never</strong> publicly exposed.
+            </p>
+          </div>
+
           {/* Pricing breakdown */}
           <div
             data-testid="activate-pricing"
@@ -130,7 +190,7 @@ export default function ActivatePage() {
             </div>
             <div className="border-t border-gray-200 pt-2">
               <div className="flex justify-between font-semibold text-gray-900">
-                <span>Total</span>
+                <span>Total per identity</span>
                 <span>{formatCents(totalCost)}</span>
               </div>
             </div>
@@ -139,6 +199,45 @@ export default function ActivatePage() {
               concurrent identities.
             </p>
           </div>
+
+          {/* AS-IS / No warranty disclaimer */}
+          <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs font-bold uppercase text-gray-700">
+              COMMUNITY TIER &mdash; PROVIDED &ldquo;AS IS&rdquo;
+            </p>
+            <p className="mt-2 text-xs text-gray-600">
+              THE COMMUNITY TIER IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS
+              AVAILABLE&rdquo; WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+              INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+              FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. CIRIS L3C
+              MAKES NO GUARANTEES REGARDING UPTIME, VERIFICATION ACCURACY, OR
+              REGISTRY AVAILABILITY AT THE COMMUNITY TIER.
+            </p>
+            <p className="mt-2 text-xs text-gray-600">
+              Community identities receive no steward-backed verification, no
+              SLA, and no liability coverage. You are solely responsible for
+              your agent&apos;s behavior. The identity bond is forfeited on
+              revocation. For guaranteed verification and accountability
+              backing, upgrade to the Professional tier.
+            </p>
+          </div>
+
+          {/* Terms acceptance */}
+          <label className="mb-4 flex cursor-pointer items-start gap-3">
+            <input
+              data-testid="checkbox-terms"
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="text-xs text-gray-600">
+              I understand that my public contact email and agent identity data
+              will be visible in the CIRIS Registry, that the community tier is
+              provided without warranty or guarantees, and that the identity
+              bond is forfeited if my identity is revoked.
+            </span>
+          </label>
 
           {error && (
             <div
@@ -152,7 +251,7 @@ export default function ActivatePage() {
           <button
             data-testid="btn-activate"
             onClick={handleActivate}
-            disabled={isLoading}
+            disabled={isLoading || !termsAccepted}
             className="w-full rounded-lg bg-emerald-600 px-6 py-3 font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-50"
           >
             {isLoading
@@ -169,7 +268,7 @@ export default function ActivatePage() {
         {/* Upgrade teaser */}
         <div className="mt-6 rounded-lg border border-gray-100 bg-white p-4 text-center shadow-sm">
           <p className="text-sm text-gray-600">
-            Need steward-backed verification or professional capabilities?
+            Need steward-backed verification, SLA, or liability coverage?
           </p>
           <p className="mt-1 text-sm font-medium text-emerald-600">
             Professional tier starts at $10/agent/month
