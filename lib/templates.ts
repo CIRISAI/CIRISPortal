@@ -90,8 +90,17 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
     label: 'Default',
     tier: 4,
     actions: [...ALL_ACTIONS],
-    description: 'Default template — all actions',
+    description:
+      'Default CIRIS agent template — full accord compliance with all actions',
     adapters: ['ciris_hosted_tools'],
+  },
+  non_ciris: {
+    label: 'Non-CIRIS',
+    tier: 4,
+    actions: ['SPEAK', 'OBSERVE', 'TOOL', 'TASK_COMPLETE'],
+    description:
+      'Third-party agent identity — basic verification and registry listing without CIRIS framework features',
+    adapters: [],
   },
 
   // ========================================================================

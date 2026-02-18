@@ -44,6 +44,13 @@ export interface DeviceAuthRecord {
     permittedActions: string[];
     approvedAdapters: string[];
   };
+  agentCategory?: 'ciris' | 'non_ciris'; // CIRIS or third-party agent
+  stripeSessionId?: string; // Stripe checkout session for payment tracking
+  paymentComplete?: boolean; // Set true after successful Stripe payment
+  challengeNonce?: string; // Hex-encoded 32-byte nonce for CIRISVerify attestation
+  attestationProof?: Record<string, unknown>; // AttestationProof from CIRISVerify
+  attestationVerified?: boolean; // Set true after server-side verification
+  hardwareType?: string; // e.g. "TPM_2_0", "IOS_SECURE_ENCLAVE", "SOFTWARE_ONLY"
   packageDownloadUrl?: string; // URL to download licensed module package zip
   createdAt: number;
   expiresAt: number; // createdAt + TTL
@@ -111,6 +118,7 @@ export function createDeviceAuth(
   const record: DeviceAuthRecord = {
     deviceCode: generateDeviceCode(),
     userCode: generateUserCode(),
+    challengeNonce: crypto.randomBytes(32).toString('hex'),
     portalUrl,
     nodeManifest,
     agentInfo,
@@ -210,6 +218,24 @@ export function consumeProvisionedKey(deviceCode: string):
   userCodeIndex.delete(record.userCode);
 
   return result;
+}
+
+/**
+ * Mark device auth records as paid by Stripe session ID.
+ * Called from the Stripe webhook when checkout.session.completed fires.
+ */
+export function markDevicePaymentComplete(stripeSessionId: string): boolean {
+  for (const record of store.values()) {
+    if (record.stripeSessionId === stripeSessionId) {
+      record.paymentComplete = true;
+      store.set(record.deviceCode, record);
+      console.log(
+        `[Device Auth] Payment complete for device ${record.userCode} (Stripe session ${stripeSessionId})`
+      );
+      return true;
+    }
+  }
+  return false;
 }
 
 export const DEVICE_CODE_TTL_SECONDS = DEVICE_CODE_TTL_MS / 1000;

@@ -115,18 +115,33 @@ export async function createActivationCheckout(
   hardwareKeyHash: string,
   successUrl: string,
   cancelUrl: string,
-  context?: { orgId?: string; userId?: string }
+  context?: {
+    orgId?: string;
+    userId?: string;
+    agentCategory?: 'ciris' | 'non_ciris';
+  }
 ): Promise<Stripe.Checkout.Session> {
   const stripe = getStripe();
   const config = getStripeConfig();
   const tierDef = TIER_DEFINITIONS[tier];
 
   // Get price IDs for this tier's activation
+  // Non-CIRIS agents use separate Stripe products (same price, tracked separately)
   const tierKey = tier === 'safety_critical' ? 'enterprise' : tier;
-  const issuancePriceId =
-    config.prices.issuance[tierKey as keyof typeof config.prices.issuance];
-  const bondPriceId =
-    config.prices.bond[tierKey as keyof typeof config.prices.bond];
+  const isNonCiris = context?.agentCategory === 'non_ciris';
+  let issuancePriceId: string;
+  let bondPriceId: string;
+
+  if (isNonCiris && tier === 'community') {
+    // Non-CIRIS community agents have separate products
+    issuancePriceId = config.prices.nonCirisIssuance.community;
+    bondPriceId = config.prices.nonCirisBond.community;
+  } else {
+    issuancePriceId =
+      config.prices.issuance[tierKey as keyof typeof config.prices.issuance];
+    bondPriceId =
+      config.prices.bond[tierKey as keyof typeof config.prices.bond];
+  }
 
   if (!issuancePriceId || !bondPriceId) {
     throw new Error(`Activation prices not configured for tier: ${tier}`);
@@ -142,6 +157,7 @@ export async function createActivationCheckout(
     metadata: {
       type: 'identity_activation',
       tier,
+      agent_category: context?.agentCategory || 'ciris',
       hardware_key_hash: hardwareKeyHash,
       issuance_fee_cents: String(tierDef.issuanceFee),
       bond_cents: String(tierDef.identityBond),

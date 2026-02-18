@@ -528,6 +528,15 @@ export async function lookupAgent(params: { agentHash: string }): Promise<any> {
   });
 }
 
+export async function getBuildAttestation(params: {
+  agentHash: string;
+}): Promise<any> {
+  return promisifyUnaryAuth(getRegistryClient(), 'getBuildAttestation', {
+    context: buildContext(),
+    agentHash: hexToBytes(params.agentHash),
+  });
+}
+
 export async function lookupPartner(params: { orgId: string }): Promise<any> {
   // Use authenticated call to get full partner record
   return promisifyUnaryAuth(getRegistryClient(), 'lookupPartner', {

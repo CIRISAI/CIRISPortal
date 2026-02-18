@@ -26,7 +26,7 @@ const ORG_TYPE = {
 } as const;
 
 // Community orgs can only use these templates
-const COMMUNITY_TEMPLATES = ['echo', 'default'];
+const COMMUNITY_TEMPLATES = ['default', 'non_ciris'];
 
 /**
  * Get the list of templates a user is allowed to provision,

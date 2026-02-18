@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { constructWebhookEvent } from '@/lib/stripe/service';
 import { isStripeConfigured } from '@/lib/stripe/config';
 import { generateKeyPair } from '@/lib/grpc/client';
+import { markDevicePaymentComplete } from '@/lib/device-auth/store';
 
 /**
  * POST /api/stripe/webhook
@@ -49,8 +50,11 @@ export async function POST(request: NextRequest) {
 
         if (metadata.type === 'identity_activation') {
           console.log(
-            `[Webhook] Identity activated: tier=${metadata.tier}, hw_key=${metadata.hardware_key_hash}, org=${metadata.org_id}`
+            `[Webhook] Identity activated: tier=${metadata.tier}, hw_key=${metadata.hardware_key_hash}, org=${metadata.org_id}, agent_category=${metadata.agent_category || 'ciris'}`
           );
+
+          // Mark device auth record as paid (if this was a device auth checkout)
+          markDevicePaymentComplete(session.id);
 
           // Auto-generate key for the org that paid
           if (metadata.org_id && metadata.user_id) {

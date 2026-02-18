@@ -13,20 +13,23 @@ import {
   isLicensedTemplate,
   getPackageForTemplate,
 } from '@/lib/packages/registry';
+import { verifyCheckoutSession } from '@/lib/stripe/verify';
 import crypto from 'crypto';
 
 /**
  * POST /api/device/complete
  *
- * Called by the Portal UI after the user authenticates and selects
- * a template + adapters. This endpoint:
+ * Called by the Portal UI after the user authenticates, selects a
+ * template + adapters, and completes payment. This endpoint:
  * 1. Validates the user owns the session (NextAuth)
- * 2. Verifies the selected template is ABAC-allowed
- * 3. Registers the agent in CIRISRegistry
- * 4. Generates a signing keypair via CIRISRegistry
- * 5. Stores the provisioned key for agent polling
+ * 2. Verifies payment was completed (device record has paymentComplete flag)
+ * 3. Verifies the selected template is ABAC-allowed
+ * 4. Registers the agent in CIRISRegistry (CIRIS or non-CIRIS type)
+ * 5. Generates a signing keypair via CIRISRegistry
+ * 6. Stores the provisioned key for agent polling
  *
  * Requires NextAuth session (user must be logged in via OAuth).
+ * Requires prior payment via /api/device/checkout → Stripe.
  */
 export async function POST(request: Request) {
   try {
@@ -40,11 +43,13 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { user_code, template_id, adapters } = body;
+    const { user_code } = body;
+    // template_id and adapters can come from body or from saved device record
+    let { template_id, adapters } = body;
 
-    if (!user_code || !template_id) {
+    if (!user_code) {
       return NextResponse.json(
-        { error: 'user_code and template_id are required' },
+        { error: 'user_code is required' },
         { status: 400 }
       );
     }
@@ -65,8 +70,59 @@ export async function POST(request: Request) {
       );
     }
 
+    // Require payment before provisioning.
+    // The webhook may not have arrived yet, so check Stripe directly as fallback.
+    if (!record.paymentComplete) {
+      if (record.stripeSessionId) {
+        const paid = await verifyCheckoutSession(record.stripeSessionId);
+        if (paid) {
+          updateRecord(record.deviceCode, { paymentComplete: true });
+        } else {
+          return NextResponse.json(
+            {
+              error:
+                'Payment not yet completed. Please complete checkout first.',
+            },
+            { status: 402 }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { error: 'Payment required. Complete checkout before provisioning.' },
+          { status: 402 }
+        );
+      }
+    }
+
+    // CIRIS agents must complete attestation before provisioning.
+    // Non-CIRIS agents skip attestation (they don't run CIRISVerify).
+    if (record.agentCategory !== 'non_ciris' && !record.attestationVerified) {
+      return NextResponse.json(
+        {
+          error:
+            'Attestation required for CIRIS agents. ' +
+            'Submit CIRISVerify attestation proof via POST /api/device/attest first.',
+        },
+        { status: 428 }
+      );
+    }
+
+    // Use saved selections from device record (set during checkout) if not in body
+    template_id = template_id || record.selectedTemplate;
+    adapters = adapters || record.selectedAdapters;
+
+    if (!template_id) {
+      return NextResponse.json(
+        {
+          error:
+            'template_id is required (not found in request or device record)',
+        },
+        { status: 400 }
+      );
+    }
+
     // Resolve user's org from session (set by JWT callback during login)
-    const orgId = (session.user as any).orgId;
+    const orgId = (session.user as any).orgId || record.orgId;
     if (!orgId) {
       return NextResponse.json(
         {
@@ -106,16 +162,24 @@ export async function POST(request: Request) {
       selectedAdapters,
     });
 
-    // Generate a random agent hash for this new agent
-    // TODO: Use real agent hash from build provenance instead of random.
-    // MVP: random hash as placeholder for the new agent identity.
-    const agentHashHex = crypto.randomBytes(32).toString('hex');
+    // Use attested agent hash if available (from CIRISVerify attestation),
+    // otherwise fall back to random hash for non-CIRIS agents.
+    const agentHashHex =
+      record.agentInfo?.agentHash && record.agentInfo.agentHash.length === 64
+        ? record.agentInfo.agentHash
+        : crypto.randomBytes(32).toString('hex');
+
+    // Use agent category from device record to set agent type
+    const agentType =
+      record.agentCategory === 'non_ciris'
+        ? 'AGENT_TYPE_CUSTOM'
+        : 'AGENT_TYPE_CIRISCARE';
 
     try {
       // Register agent in CIRISRegistry
       await registerAgent({
         agentHash: agentHashHex,
-        agentType: 'AGENT_TYPE_CIRISCARE', // Default type
+        agentType,
         version: { major: 1, minor: 0, patch: 0 },
         capabilities: template.actions,
         identityTemplate: template_id,

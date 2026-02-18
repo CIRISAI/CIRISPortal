@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const record = createDeviceAuth(portal_url, {}, agent_info || {});
 
-    // RFC 8628 response format
+    // RFC 8628 response format + attestation challenge
     return NextResponse.json({
       device_code: record.deviceCode,
       user_code: record.userCode,
@@ -43,6 +43,11 @@ export async function POST(request: Request) {
       verification_uri_complete: `${PORTAL_BASE_URL}/device?code=${record.userCode}`,
       expires_in: DEVICE_CODE_TTL_SECONDS,
       interval: POLL_INTERVAL_SECONDS,
+      // CIRISVerify attestation challenge (32 bytes, hex-encoded).
+      // CIRIS agents MUST sign this with export_attestation() and submit
+      // via POST /api/device/attest before the key will be provisioned.
+      // Non-CIRIS agents may skip attestation.
+      challenge_nonce: record.challengeNonce,
     });
   } catch (error) {
     console.error('[Device Auth] Authorize error:', error);
