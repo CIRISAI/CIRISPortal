@@ -333,6 +333,23 @@ STRIPE_PRODUCT_ID_SAFETY=prod_...
 
 For Non-CIRIS community products, additional env vars are needed (see `.env.example`).
 
+### Current Billing Status
+
+- **Community tier**: Self-service via Stripe ($1.50 per agent identity activation)
+- **Professional/Enterprise/Safety-Critical**: Blocked behind `sales@ciris.ai` (not yet self-service)
+- All upgrade buttons/links redirect to `mailto:sales@ciris.ai`
+- Subscription checkout API returns 403 directing users to sales email
+- Community tier provided AS-IS without warranty (UCC 2-316 compliant disclaimers on activation page)
+- Feature language avoids "guarantees" or "liability backing" to not contradict AS-IS disclaimers
+
+### Node Access Control
+
+CIRISNode instances restrict which org IDs they service:
+
+- **node.ciris.ai**: Restricted to CIRIS.ai org (full features including WBD routing)
+- **ethicsengine.org**: Open to all orgs (benchmarking only)
+- WBD routing via node.ciris.ai will be an additional charge for community agents
+
 ## Related Projects
 
 | Project           | Purpose                             |
