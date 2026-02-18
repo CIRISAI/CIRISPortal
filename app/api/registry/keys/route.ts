@@ -93,9 +93,20 @@ function transformKeyRecord(key: any): any {
 
 /**
  * GET /api/registry/keys - List keys for an organization
+ * Users can only view keys for their own organization (unless admin)
  */
 export async function GET(request: Request) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // @ts-expect-error - extended session type
+    const userRole = session.user.role as string;
+    // @ts-expect-error - extended session type
+    const userOrgId = session.user.orgId as string;
+
     const { searchParams } = new URL(request.url);
     const orgId = searchParams.get('org_id');
 
@@ -103,6 +114,14 @@ export async function GET(request: Request) {
       return NextResponse.json(
         { error: 'org_id is required' },
         { status: 400 }
+      );
+    }
+
+    // Org isolation: users can only view their own org's keys (admins can view all)
+    if (userRole !== 'admin' && orgId !== userOrgId) {
+      return NextResponse.json(
+        { error: 'Access denied: cannot view keys for other organizations' },
+        { status: 403 }
       );
     }
 
@@ -133,29 +152,59 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/registry/keys - Generate, activate, rotate, or revoke keys
+ * All actions require authentication and org isolation
  */
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // @ts-expect-error - extended session type
+    const userRole = (session.user.role as string) || 'community';
+    // @ts-expect-error - extended session type
+    const userOrgId = session.user.orgId as string;
+
     const body = await request.json();
     const { action, ...params } = body;
 
+    // Org isolation: users can only modify their own org's keys (admins can modify all)
+    if (params.org_id && userRole !== 'admin' && params.org_id !== userOrgId) {
+      return NextResponse.json(
+        { error: 'Access denied: cannot modify keys for other organizations' },
+        { status: 403 }
+      );
+    }
+
+    // Role-based action restrictions
+    // Community users have limited key management capabilities
+    const adminOnlyActions = ['rotate', 'revoke'];
+
+    if (adminOnlyActions.includes(action) && userRole === 'community') {
+      return NextResponse.json(
+        {
+          error:
+            'Access denied: key rotation and revocation require a paid tier',
+          code: 'UPGRADE_REQUIRED',
+          redirect: '/pricing',
+        },
+        { status: 403 }
+      );
+    }
+
     // Community orgs must pay per-key activation — no free key generation.
     // Professional+ tiers include key generation in their subscription.
-    if (action === 'generate') {
-      const session = await getServerSession();
-      // @ts-expect-error - extended session type
-      const userRole = session?.user?.role;
-      if (userRole === 'community') {
-        return NextResponse.json(
-          {
-            error:
-              'Activation payment required. Each agent identity costs $1.50.',
-            code: 'ACTIVATION_REQUIRED',
-            redirect: '/activate',
-          },
-          { status: 402 }
-        );
-      }
+    if (action === 'generate' && userRole === 'community') {
+      return NextResponse.json(
+        {
+          error:
+            'Activation payment required. Each agent identity costs $1.50.',
+          code: 'ACTIVATION_REQUIRED',
+          redirect: '/activate',
+        },
+        { status: 402 }
+      );
     }
 
     let response;

@@ -227,9 +227,11 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 function ActiveKeyCard({
   activeKey,
   onRotate,
+  canRotate = true,
 }: {
   activeKey?: PartnerKeyRecord;
   onRotate?: () => void;
+  canRotate?: boolean;
 }) {
   if (!activeKey) {
     return (
@@ -339,14 +341,16 @@ function ActiveKeyCard({
             <Download className="h-4 w-4" />
             Download Public Keys
           </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
-            onClick={onRotate}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Rotate Keys
-          </Button>
+          {canRotate && (
+            <Button
+              variant="outline"
+              className="gap-2 border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+              onClick={onRotate}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Rotate Keys
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -391,10 +395,14 @@ function KeyHistoryTable({
   keys,
   onActivate,
   onRevoke,
+  canActivate = true,
+  canRevoke = true,
 }: {
   keys: PartnerKeyRecord[];
   onActivate: (keyId: string) => void;
   onRevoke: (keyId: string) => void;
+  canActivate?: boolean;
+  canRevoke?: boolean;
 }) {
   return (
     <Card>
@@ -470,7 +478,7 @@ function KeyHistoryTable({
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem>View Details</DropdownMenuItem>
                         <DropdownMenuItem>Copy Public Key</DropdownMenuItem>
-                        {key.status === KeyStatus.PENDING && (
+                        {canActivate && key.status === KeyStatus.PENDING && (
                           <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -481,18 +489,19 @@ function KeyHistoryTable({
                             </DropdownMenuItem>
                           </>
                         )}
-                        {(key.status === KeyStatus.ACTIVE ||
-                          key.status === KeyStatus.PENDING) && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => onRevoke(key.keyId)}
-                              className="text-red-600"
-                            >
-                              Revoke Key
-                            </DropdownMenuItem>
-                          </>
-                        )}
+                        {canRevoke &&
+                          (key.status === KeyStatus.ACTIVE ||
+                            key.status === KeyStatus.PENDING) && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onRevoke(key.keyId)}
+                                className="text-red-600"
+                              >
+                                Revoke Key
+                              </DropdownMenuItem>
+                            </>
+                          )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -1151,6 +1160,12 @@ export default function KeysPage() {
     (session?.user as { userId?: string })?.userId ||
     session?.user?.email ||
     '';
+  const userRole = (session?.user as { role?: string })?.role || 'community';
+
+  // Role-based permissions
+  const canGenerateKeys = userRole !== 'community'; // Paid tiers only
+  const canRotateKeys = userRole !== 'community'; // Paid tiers only
+  const canRevokeKeys = userRole !== 'community'; // Paid tiers only
 
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
@@ -1326,16 +1341,26 @@ export default function KeysPage() {
             Manage cryptographic signing keys for your organization
           </p>
         </div>
-        <Button className="gap-2" onClick={() => setGenerateDialogOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Generate New Key
-        </Button>
+        {canGenerateKeys ? (
+          <Button className="gap-2" onClick={() => setGenerateDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Generate New Key
+          </Button>
+        ) : (
+          <Button className="gap-2" asChild>
+            <a href="/activate">
+              <Plus className="h-4 w-4" />
+              Activate Agent Identity
+            </a>
+          </Button>
+        )}
       </div>
 
       {/* Active Key */}
       <ActiveKeyCard
         activeKey={activeKey}
         onRotate={() => setRotateDialogOpen(true)}
+        canRotate={canRotateKeys}
       />
 
       {/* Custody Info */}
@@ -1347,6 +1372,8 @@ export default function KeysPage() {
           keys={keys}
           onActivate={handleActivateKey}
           onRevoke={handleRevokeKey}
+          canActivate={canGenerateKeys}
+          canRevoke={canRevokeKeys}
         />
       )}
 
