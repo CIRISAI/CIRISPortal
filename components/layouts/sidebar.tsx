@@ -177,7 +177,10 @@ export function Sidebar() {
   );
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-white">
+    <div
+      data-testid="sidebar"
+      className="flex h-full w-64 flex-col border-r bg-white"
+    >
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 font-bold text-white">
@@ -205,6 +208,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
+              data-testid={`nav-${item.href.replace('/', '')}`}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 isActive

@@ -96,20 +96,27 @@ function LoginForm() {
             Sign in to manage your agent identities
           </p>
           {isDevTest && (
-            <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+            <span
+              data-testid="devtest-badge"
+              className="mt-2 inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
+            >
               Development Mode
             </span>
           )}
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <div
+            data-testid="login-error"
+            className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+          >
             {error}
           </div>
         )}
 
         {/* Google OAuth - always shown */}
         <button
+          data-testid="btn-google-signin"
           onClick={() => signIn('google', { callbackUrl })}
           disabled={isLoading}
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:shadow disabled:opacity-50"
@@ -137,7 +144,10 @@ function LoginForm() {
 
         {/* Community tier info */}
         {!isDevTest && (
-          <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
+          <div
+            data-testid="community-info"
+            className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/50 p-4"
+          >
             <p className="text-center text-sm font-medium text-emerald-800">
               Get started with a Community identity
             </p>

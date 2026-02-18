@@ -57,7 +57,7 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div data-testid="pricing-page" className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-gray-900">
           Agent Identity &amp; Assurance Tiers
@@ -78,6 +78,7 @@ export default function PricingPage() {
           return (
             <div
               key={tierName}
+              data-testid={`tier-card-${tierName}`}
               className={`relative rounded-xl border p-6 ${
                 isCurrent
                   ? 'border-emerald-300 bg-emerald-50/50 shadow-md'
@@ -86,7 +87,10 @@ export default function PricingPage() {
             >
               {isCurrent && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
+                  <span
+                    data-testid="tier-current-badge"
+                    className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white"
+                  >
                     Current Tier
                   </span>
                 </div>
@@ -161,6 +165,7 @@ export default function PricingPage() {
               <div className="mt-auto">
                 {isCurrent ? (
                   <button
+                    data-testid={`btn-current-plan-${tierName}`}
                     disabled
                     className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700"
                   >
@@ -168,6 +173,7 @@ export default function PricingPage() {
                   </button>
                 ) : isHigher ? (
                   <button
+                    data-testid={`btn-upgrade-${tierName}`}
                     onClick={() => handleUpgrade(tierName)}
                     disabled={loadingTier === tierName}
                     className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"

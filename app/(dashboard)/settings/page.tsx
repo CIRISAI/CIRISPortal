@@ -153,7 +153,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Billing & Tier */}
-        <div className="rounded-lg border bg-white p-6">
+        <div
+          data-testid="billing-section"
+          className="rounded-lg border bg-white p-6"
+        >
           <div className="mb-4 flex items-center gap-3">
             <div className="rounded-lg bg-emerald-100 p-2">
               <CreditCard className="h-5 w-5 text-emerald-600" />
@@ -181,6 +184,7 @@ export default function SettingsPage() {
             <div className="flex gap-2 pt-2">
               {userRole === 'community' && (
                 <a
+                  data-testid="btn-upgrade-tier"
                   href="/pricing"
                   className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
                 >
@@ -188,6 +192,7 @@ export default function SettingsPage() {
                 </a>
               )}
               <button
+                data-testid="btn-manage-billing"
                 onClick={async () => {
                   setPortalLoading(true);
                   try {
@@ -228,6 +233,7 @@ export default function SettingsPage() {
           </p>
 
           <button
+            data-testid="btn-sign-out"
             onClick={() => signOut({ callbackUrl: '/login' })}
             className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
           >

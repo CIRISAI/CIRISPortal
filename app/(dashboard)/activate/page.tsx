@@ -88,7 +88,10 @@ export default function ActivatePage() {
           </div>
 
           {/* What you get */}
-          <div className="mb-6 rounded-lg bg-gray-50 p-4">
+          <div
+            data-testid="activate-features"
+            className="mb-6 rounded-lg bg-gray-50 p-4"
+          >
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500">
               Community Identity Includes
             </h2>
@@ -108,7 +111,10 @@ export default function ActivatePage() {
           </div>
 
           {/* Pricing breakdown */}
-          <div className="mb-6 space-y-2 rounded-lg border border-gray-200 p-4">
+          <div
+            data-testid="activate-pricing"
+            className="mb-6 space-y-2 rounded-lg border border-gray-200 p-4"
+          >
             <div className="flex justify-between text-sm text-gray-600">
               <span>Identity issuance fee</span>
               <span>{formatCents(tier.issuanceFee)}</span>
@@ -134,12 +140,16 @@ export default function ActivatePage() {
           </div>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            <div
+              data-testid="activate-error"
+              className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+            >
               {error}
             </div>
           )}
 
           <button
+            data-testid="btn-activate"
             onClick={handleActivate}
             disabled={isLoading}
             className="w-full rounded-lg bg-emerald-600 px-6 py-3 font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow disabled:opacity-50"

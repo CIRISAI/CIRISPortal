@@ -45,6 +45,7 @@ export function TierBadge({ tier, size = 'sm', className }: TierBadgeProps) {
 
   return (
     <span
+      data-testid={`tier-badge-${tier}`}
       className={cn(
         'inline-flex items-center rounded-full font-medium',
         style.bg,
@@ -69,10 +70,11 @@ export function TierIndicator({
   showUpgrade?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div data-testid="tier-indicator" className="flex items-center gap-2">
       <TierBadge tier={tier} />
       {showUpgrade && tier === 'community' && (
         <a
+          data-testid="btn-sidebar-upgrade"
           href="/pricing"
           className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline"
         >
