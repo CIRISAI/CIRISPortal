@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { constructWebhookEvent } from '@/lib/stripe/service';
 import { isStripeConfigured } from '@/lib/stripe/config';
+import { generateKeyPair } from '@/lib/grpc/client';
 
 /**
  * POST /api/stripe/webhook
@@ -48,10 +49,32 @@ export async function POST(request: NextRequest) {
 
         if (metadata.type === 'identity_activation') {
           console.log(
-            `[Webhook] Identity activated: tier=${metadata.tier}, hw_key=${metadata.hardware_key_hash}`
+            `[Webhook] Identity activated: tier=${metadata.tier}, hw_key=${metadata.hardware_key_hash}, org=${metadata.org_id}`
           );
-          // TODO: Update org metadata in Registry to activation_status=active
-          // via gRPC updateOrganization or org metadata update
+
+          // Auto-generate key for the org that paid
+          if (metadata.org_id && metadata.user_id) {
+            try {
+              const keyResponse = await generateKeyPair({
+                orgId: metadata.org_id,
+                requesterUserId: metadata.user_id,
+                activateImmediately: true,
+              });
+              console.log(
+                `[Webhook] Key auto-generated for org ${metadata.org_id}: ${keyResponse?.keyRecord?.keyId || keyResponse?.key_record?.key_id || 'unknown'}`
+              );
+            } catch (keyError) {
+              console.error(
+                `[Webhook] Failed to auto-generate key for org ${metadata.org_id}:`,
+                keyError
+              );
+              // Payment succeeded but key generation failed — needs manual follow-up
+            }
+          } else {
+            console.warn(
+              '[Webhook] Activation payment missing org_id/user_id in metadata — key not auto-generated'
+            );
+          }
         } else if (metadata.type === 'tier_subscription') {
           console.log(`[Webhook] Subscription started: tier=${metadata.tier}`);
           // TODO: Update org tier in Registry

@@ -114,7 +114,8 @@ export async function createActivationCheckout(
   tier: TierName,
   hardwareKeyHash: string,
   successUrl: string,
-  cancelUrl: string
+  cancelUrl: string,
+  context?: { orgId?: string; userId?: string }
 ): Promise<Stripe.Checkout.Session> {
   const stripe = getStripe();
   const config = getStripeConfig();
@@ -144,6 +145,8 @@ export async function createActivationCheckout(
       hardware_key_hash: hardwareKeyHash,
       issuance_fee_cents: String(tierDef.issuanceFee),
       bond_cents: String(tierDef.identityBond),
+      org_id: context?.orgId || '',
+      user_id: context?.userId || '',
     },
     success_url: successUrl,
     cancel_url: cancelUrl,

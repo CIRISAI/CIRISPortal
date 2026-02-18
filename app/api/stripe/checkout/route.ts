@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // @ts-expect-error - extended session type
+    const orgId = session.user?.orgId || '';
+    // @ts-expect-error - extended session type
+    const userId = session.user?.userId || '';
+
     // Get or create Stripe customer
     const email = session.user.email;
     let customer = await getCustomerByEmail(email);
@@ -79,7 +84,8 @@ export async function POST(request: NextRequest) {
         tier,
         hardwareKeyHash,
         `${baseUrl}/dashboard?activated=true`,
-        `${baseUrl}/activate?canceled=true`
+        `${baseUrl}/activate?canceled=true`,
+        { orgId, userId }
       );
 
       return NextResponse.json({ url: checkoutSession.url });

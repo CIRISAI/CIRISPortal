@@ -1,8 +1,14 @@
 /**
  * CIRIS Tier Definitions
  *
- * Pricing model: issuance fee (non-refundable) + identity bond (refundable) + monthly assurance subscription.
- * Pattern: ethicsengine-portal-api/app/api/standing_routes.py TIER_DEFINITIONS
+ * Pricing model: activation cost PER AGENT IDENTITY (issuance fee + identity bond)
+ * plus optional monthly assurance subscription for paid tiers.
+ *
+ * Community: $1.50 per agent identity ($0.50 fee + $1.00 bond), max 5 concurrent.
+ * Professional+: activation cost per key, plus monthly subscription for assurance.
+ *
+ * Bond is forfeited on revocation by default. Admin can issue manual refund
+ * via Stripe dashboard for properly decommissioned identities.
  *
  * All prices in cents (USD).
  */
@@ -16,11 +22,11 @@ export type TierName =
 export interface TierDefinition {
   /** Recurring monthly price per agent (cents). null = custom pricing. */
   monthlyPrice: number | null;
-  /** Non-refundable identity issuance fee (cents). */
+  /** Non-refundable identity issuance fee PER KEY (cents). */
   issuanceFee: number;
-  /** Refundable identity bond (cents). Returned on proper decommission. */
+  /** Identity bond PER KEY (cents). Forfeited on revocation; admin can manually refund. */
   identityBond: number;
-  /** Max agents per org. null = unlimited. */
+  /** Max concurrent agent identities per org. null = unlimited. */
   agentLimit: number | null;
   /** Display label. */
   label: string;

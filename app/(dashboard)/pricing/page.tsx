@@ -215,9 +215,8 @@ export default function PricingPage() {
           <div>
             <h3 className="mb-2 font-medium text-gray-900">Identity Bond</h3>
             <p className="text-sm text-gray-600">
-              A refundable stake tied to your hardware key. Returned in full
-              when you properly decommission your agent identity. Forfeited if
-              the identity is used maliciously or revoked.
+              A per-identity stake for Sybil resistance. Forfeited on
+              revocation. Costs are per agent identity, not per organization.
             </p>
           </div>
           <div>

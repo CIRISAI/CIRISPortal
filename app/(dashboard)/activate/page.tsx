@@ -11,9 +11,9 @@ import {
 /**
  * Identity Activation Page
  *
- * Shown to community users who have signed up via OAuth but haven't
- * paid their activation stake yet. Redirected here from middleware
- * when org.metadata.activation_status !== 'active'.
+ * Community users pay $1.50 per agent identity ($0.50 issuance + $1.00 bond).
+ * Each activation generates one key. Users can activate up to 5 identities.
+ * Bond is forfeited on revocation; admin can manually refund via Stripe.
  */
 export default function ActivatePage() {
   const { data: session } = useSession();
@@ -80,10 +80,10 @@ export default function ActivatePage() {
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Activate Your Identity
+              New Agent Identity
             </h1>
             <p className="mt-2 text-gray-600">
-              Welcome, {session?.user?.name || session?.user?.email}
+              {formatCents(totalCost)} per agent identity
             </p>
           </div>
 
@@ -121,9 +121,9 @@ export default function ActivatePage() {
             </div>
             <div className="flex justify-between text-sm text-gray-600">
               <span>
-                Refundable identity bond
+                Identity bond
                 <span className="ml-1 text-xs text-gray-400">
-                  (returned on decommission)
+                  (forfeited on revocation)
                 </span>
               </span>
               <span>{formatCents(tier.identityBond)}</span>
@@ -135,7 +135,8 @@ export default function ActivatePage() {
               </div>
             </div>
             <p className="text-xs text-gray-400">
-              No recurring charges. Upgrade to Professional anytime.
+              Per identity. No recurring charges. Up to {tier.agentLimit}{' '}
+              concurrent identities.
             </p>
           </div>
 
@@ -160,9 +161,8 @@ export default function ActivatePage() {
           </button>
 
           <p className="mt-4 text-center text-xs text-gray-400">
-            Secured by Stripe. Your identity bond of{' '}
-            {formatCents(tier.identityBond)} is fully refundable when you
-            properly decommission your agent identity.
+            Secured by Stripe. Bond of {formatCents(tier.identityBond)} is
+            forfeited if the identity is revoked.
           </p>
         </div>
 

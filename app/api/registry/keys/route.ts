@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from '@/lib/auth';
 import {
   listKeys,
   generateKeyPair,
@@ -137,6 +138,25 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { action, ...params } = body;
+
+    // Community orgs must pay per-key activation — no free key generation.
+    // Professional+ tiers include key generation in their subscription.
+    if (action === 'generate') {
+      const session = await getServerSession();
+      // @ts-expect-error - extended session type
+      const userRole = session?.user?.role;
+      if (userRole === 'community') {
+        return NextResponse.json(
+          {
+            error:
+              'Activation payment required. Each agent identity costs $1.50.',
+            code: 'ACTIVATION_REQUIRED',
+            redirect: '/activate',
+          },
+          { status: 402 }
+        );
+      }
+    }
 
     let response;
     switch (action) {

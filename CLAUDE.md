@@ -254,19 +254,21 @@ CIRISPortal includes Stripe-based billing for identity activation and assurance 
 
 ### Pricing Model
 
-Identity activation uses a two-part cost for Sybil resistance:
+Identity activation uses a two-part cost **per agent identity** for Sybil resistance:
 
 1. **Issuance fee** (non-refundable) — covers registry infrastructure, prevents identity churn
-2. **Identity bond** (refundable) — accountability anchor, returned on proper decommission
+2. **Identity bond** — forfeited on revocation; admin can manually refund via Stripe dashboard
+
+Community users must pay per key — no free key generation. Professional+ tiers include key generation in their subscription but still pay the one-time activation cost per identity.
 
 Community tier distinguishes **CIRIS agents** (built on the CIRIS framework) from **Non-CIRIS agents** (third-party agents using the CIRIS identity system). Both cost the same but are tracked as separate Stripe products.
 
-| Tier            | Issuance Fee | Identity Bond | Monthly/Agent | Total Activation |
-| --------------- | ------------ | ------------- | ------------- | ---------------- |
-| Community       | $0.50        | $1.00         | Free          | $1.50            |
-| Professional    | $5.00        | $10.00        | $10/mo        | $15.00           |
-| Enterprise      | $25.00       | $100.00       | $100/mo       | $125.00          |
-| Safety-Critical | $250.00      | $1,000.00     | Custom        | $1,250.00        |
+| Tier            | Issuance Fee/Key | Bond/Key  | Monthly/Agent | Activation/Key | Max Keys  |
+| --------------- | ---------------- | --------- | ------------- | -------------- | --------- |
+| Community       | $0.50            | $1.00     | Free          | $1.50          | 5         |
+| Professional    | $5.00            | $10.00    | $10/mo        | $15.00         | 50        |
+| Enterprise      | $25.00           | $100.00   | $100/mo       | $125.00        | 500       |
+| Safety-Critical | $250.00          | $1,000.00 | Custom        | $1,250.00      | Unlimited |
 
 ### Stripe Product Catalog (CIRIS L3C account)
 

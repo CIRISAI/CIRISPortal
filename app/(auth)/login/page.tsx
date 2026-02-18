@@ -166,7 +166,7 @@ function LoginForm() {
               </li>
             </ul>
             <p className="mt-3 text-center text-xs text-gray-500">
-              $0.50 issuance fee + $1.00 refundable identity bond
+              $1.50 per agent identity ($0.50 fee + $1.00 bond)
             </p>
           </div>
         )}
