@@ -216,9 +216,9 @@ npm run build
 npm run deploy
 ```
 
-## CIRIS Covenant Alignment
+## CIRIS Accord Alignment
 
-This portal operates under the CIRIS Covenant. Key principles:
+This portal operates under the CIRIS Accord. Key principles:
 
 - **Integrity** - All operations cryptographically logged
 - **Transparency** - Audit trail visible to appropriate roles

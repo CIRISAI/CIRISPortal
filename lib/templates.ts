@@ -48,7 +48,7 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
       'FORGET',
       'TASK_COMPLETE',
     ],
-    adapters: ['ciris_covenant_metrics', 'session_logs'],
+    adapters: ['ciris_accord_metrics', 'session_logs'],
     description: 'Community moderation agent (Ubuntu philosophy)',
   },
   scout: {
@@ -69,7 +69,7 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
     label: 'Datum',
     tier: 2,
     actions: [...ALL_ACTIONS],
-    adapters: ['ciris_hosted_tools', 'ciris_covenant_metrics'],
+    adapters: ['ciris_hosted_tools', 'ciris_accord_metrics'],
     description: 'Data measurement and evaluation agent',
   },
   ally: {
@@ -113,7 +113,7 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
     ],
     adapters: [
       'cirisnode',
-      'ciris_covenant_metrics',
+      'ciris_accord_metrics',
       'ciris_verify',
       'medical_llm',
       'openemr',
@@ -141,7 +141,7 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
     ],
     adapters: [
       'cirisnode',
-      'ciris_covenant_metrics',
+      'ciris_accord_metrics',
       'ciris_verify',
       'financial_llm',
       'fix_gateway',
@@ -169,7 +169,7 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
     ],
     adapters: [
       'cirisnode',
-      'ciris_covenant_metrics',
+      'ciris_accord_metrics',
       'ciris_verify',
       'legal_llm',
       'ecf_adapter',
@@ -192,7 +192,7 @@ export interface KnownAdapter {
 export const KNOWN_ADAPTERS: KnownAdapter[] = [
   // Core / Platform
   { name: 'ciris_hosted_tools', category: 'Core' },
-  { name: 'ciris_covenant_metrics', category: 'Core' },
+  { name: 'ciris_accord_metrics', category: 'Core' },
   { name: 'ciris_verify', category: 'Core' },
   { name: 'cirisnode', category: 'Core' },
   { name: 'session_logs', category: 'Core' },

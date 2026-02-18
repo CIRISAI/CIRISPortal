@@ -254,7 +254,7 @@ function LoginForm() {
         )}
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          Operated under the CIRIS Covenant
+          Operated under the CIRIS Accord
         </p>
       </div>
     </div>
