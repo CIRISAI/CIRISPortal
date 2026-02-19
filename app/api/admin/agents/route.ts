@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import {
   registerAgent,
   batchRegisterAgents,
@@ -119,7 +120,7 @@ export async function POST(request: Request) {
 
     // Single registration
     const {
-      agentHash,
+      agentHash: providedHash,
       agentType,
       version,
       capabilities,
@@ -131,15 +132,18 @@ export async function POST(request: Request) {
       orgId,
     } = body;
 
-    if (!agentHash || !agentType || !version || !capabilities) {
+    if (!agentType || !version || !capabilities) {
       return NextResponse.json(
         {
-          error:
-            'Missing required fields: agentHash, agentType, version, capabilities',
+          error: 'Missing required fields: agentType, version, capabilities',
         },
         { status: 400 }
       );
     }
+
+    // Generate identity ID server-side if not provided.
+    // Build hashes live in the build registry; agent identities get assigned IDs.
+    const agentHash = providedHash || crypto.randomBytes(32).toString('hex');
 
     const response = await registerAgent({
       agentHash,

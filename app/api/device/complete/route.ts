@@ -162,9 +162,11 @@ export async function POST(request: Request) {
       selectedAdapters,
     });
 
-    // Use attested agent hash if available (from CIRISVerify attestation),
-    // otherwise fall back to random hash for non-CIRIS agents.
-    const agentHashHex =
+    // Agent identity ID: for CIRIS agents, use the attested build hash from
+    // CIRISVerify (links identity to a verified binary for inspection).
+    // For non-CIRIS agents, generate a random identity ID (no build linkage;
+    // build inspection is a separate concern handled by the build registry).
+    const agentIdentityId =
       record.agentInfo?.agentHash && record.agentInfo.agentHash.length === 64
         ? record.agentInfo.agentHash
         : crypto.randomBytes(32).toString('hex');
@@ -178,7 +180,7 @@ export async function POST(request: Request) {
     try {
       // Register agent in CIRISRegistry
       await registerAgent({
-        agentHash: agentHashHex,
+        agentHash: agentIdentityId,
         agentType,
         version: { major: 1, minor: 0, patch: 0 },
         capabilities: template.actions,
@@ -259,7 +261,7 @@ export async function POST(request: Request) {
         ed25519PublicKey: toBase64(publicKeyBytes),
         keyId,
         orgId,
-        agentRecordHash: agentHashHex,
+        agentRecordHash: agentIdentityId,
       },
       {
         identityTemplate: template_id,

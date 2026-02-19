@@ -264,7 +264,6 @@ function StatusBadge({ status }: { status: string }) {
 function RegisterAgentDialog() {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    agentHash: '',
     agentType: '',
     versionMajor: '1',
     versionMinor: '0',
@@ -287,7 +286,6 @@ function RegisterAgentDialog() {
       setRegistrationError(null);
       console.log('[RegisterAgent] Sending request:', data);
       const payload = {
-        agentHash: data.agentHash,
         agentType: data.agentType,
         version: {
           major: parseInt(data.versionMajor),
@@ -347,7 +345,6 @@ function RegisterAgentDialog() {
 
   const resetForm = () => {
     setFormData({
-      agentHash: '',
       agentType: '',
       versionMajor: '1',
       versionMinor: '0',
@@ -370,9 +367,7 @@ function RegisterAgentDialog() {
     }));
   };
 
-  const isValidHash = /^[a-fA-F0-9]{64}$/.test(formData.agentHash);
   const isFormValid =
-    isValidHash &&
     formData.agentType &&
     formData.capabilities.length > 0 &&
     formData.maxAutonomyTier;
@@ -402,25 +397,6 @@ function RegisterAgentDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 overflow-y-auto py-4 pr-1">
-          <div className="space-y-2">
-            <Label htmlFor="agentHash">Agent Hash (SHA-256)</Label>
-            <Input
-              id="agentHash"
-              data-testid="input-agent-hash"
-              placeholder="64-character hex hash"
-              value={formData.agentHash}
-              onChange={(e) =>
-                setFormData({ ...formData, agentHash: e.target.value })
-              }
-              className="font-mono text-sm"
-            />
-            {formData.agentHash && !isValidHash && (
-              <p className="text-xs text-red-500">
-                Must be exactly 64 hexadecimal characters
-              </p>
-            )}
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Agent Type</Label>
@@ -1008,7 +984,7 @@ function AttestationDialog({ agent }: { agent: AgentRecord }) {
                     navigator.clipboard.writeText(attestation.commitHash);
                     toast({
                       title: 'Copied',
-                      description: 'Hash copied to clipboard',
+                      description: 'Copied to clipboard',
                     });
                   }}
                 >
@@ -1080,7 +1056,7 @@ function AgentDetailsDialog({ agent }: { agent: AgentRecord }) {
           </div>
 
           <div>
-            <Label className="text-muted-foreground">Agent Hash</Label>
+            <Label className="text-muted-foreground">Agent ID</Label>
             <div className="mt-1 flex items-center gap-2">
               <code className="flex-1 overflow-x-auto rounded bg-muted px-2 py-1 font-mono text-sm">
                 {agent.agentHash}
@@ -1364,7 +1340,7 @@ export default function AdminAgentsPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by hash..."
+                  placeholder="Search by ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 font-mono"
@@ -1445,7 +1421,7 @@ export default function AdminAgentsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b text-left text-sm text-muted-foreground">
-                    <th className="pb-3 font-medium">Hash</th>
+                    <th className="pb-3 font-medium">Agent ID</th>
                     <th className="pb-3 font-medium">Type</th>
                     <th className="pb-3 font-medium">Version</th>
                     <th className="pb-3 font-medium">Template</th>
@@ -1474,7 +1450,7 @@ export default function AdminAgentsPage() {
                               navigator.clipboard.writeText(agent.agentHash);
                               toast({
                                 title: 'Copied',
-                                description: 'Hash copied to clipboard',
+                                description: 'Agent ID copied to clipboard',
                               });
                             }}
                           >
@@ -1542,12 +1518,12 @@ export default function AdminAgentsPage() {
                                 navigator.clipboard.writeText(agent.agentHash);
                                 toast({
                                   title: 'Copied',
-                                  description: 'Hash copied to clipboard',
+                                  description: 'Agent ID copied to clipboard',
                                 });
                               }}
                             >
                               <Copy className="mr-2 h-4 w-4" />
-                              Copy Hash
+                              Copy Agent ID
                             </DropdownMenuItem>
                             {agent.status === 'AGENT_ACTIVE' && (
                               <>
