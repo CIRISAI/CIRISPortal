@@ -6,15 +6,6 @@ import {
 } from '@/lib/grpc/client';
 
 /**
- * CIRIS Internal Organization - must match user-provisioning.ts
- */
-const CIRIS_ORG = {
-  id: 'ciris-internal',
-  name: 'CIRIS',
-  domain: 'ciris.ai',
-};
-
-/**
  * GET /api/registry/organizations
  * List all organizations
  */
@@ -70,14 +61,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate org ID from domain if provided, otherwise from name
-    // Use canonical CIRIS org ID for ciris.ai domain
-    const isCirisInternal = oauthDomain?.toLowerCase() === CIRIS_ORG.domain;
-    const orgId = isCirisInternal
-      ? CIRIS_ORG.id
-      : oauthDomain
-        ? `org-${oauthDomain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
-        : `org-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
+    // Generate org ID from primary email (per-user) or name as fallback.
+    // No domain-based grouping — each org is unique.
+    const orgId = primaryEmail
+      ? `org-${primaryEmail.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+      : `org-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString(36)}`;
 
     // For LICENSEE orgs, use the dedicated createLicenseeOrganization RPC
     if (orgType === 'ORG_LICENSEE' && parentOrgId) {

@@ -3,6 +3,13 @@
  *
  * Handles automatic user and organization provisioning on OAuth login.
  * Integrates with CIRISRegistry to persist user data.
+ *
+ * Each user gets their own unique organization (1:1 user:org).
+ * Permissions are ABAC-based on: org ID, org tier, and system admin status.
+ *
+ * TODO: Multi-user orgs — allow inviting users to an existing org
+ * TODO: Pro tier — upgrade path from community to professional
+ * TODO: System admin promotion — allow bootstrap admin to promote others
  */
 
 import {
@@ -17,9 +24,10 @@ import {
 
 /**
  * Role hierarchy for CIRISPortal:
- * - admin: CIRIS internal team, full system access
- * - partner: Organization admins who manage licensees
- * - licensee: End users with read-only access to their org
+ * - admin: System administrators (bootstrap: eric@ciris.ai)
+ * - partner: CIRIS internal team members (elevated access, not system admin)
+ * - licensee: Future: non-admin members of multi-user orgs
+ * - community: Self-signup community users (default)
  */
 export type UserRole = 'admin' | 'partner' | 'licensee' | 'community';
 
@@ -35,21 +43,35 @@ export const OrgRole = {
 } as const;
 
 /**
- * Map internal OrgRole to our simplified UserRole
+ * Bootstrap system admin — the initial system admin who can promote others.
+ * Only this user gets auto-provisioned as SYSTEM_ADMIN in the registry.
  */
-function orgRoleToUserRole(
-  orgRole: string,
-  isCirisInternal: boolean
-): UserRole {
-  // CIRIS internal users are always admins
-  if (isCirisInternal) {
+const BOOTSTRAP_SYSTEM_ADMIN = 'eric@ciris.ai';
+
+/** CIRIS internal domain */
+const CIRIS_DOMAIN = 'ciris.ai';
+
+/**
+ * Map OrgRole from registry to portal UserRole for returning users.
+ */
+function orgRoleToUserRole(orgRole: string, email: string): UserRole {
+  // Bootstrap system admin is always admin
+  if (email.toLowerCase() === BOOTSTRAP_SYSTEM_ADMIN) {
     return 'admin';
+  }
+
+  const domain = email.split('@')[1]?.toLowerCase();
+
+  // CIRIS internal users get partner role (elevated access, not system admin)
+  if (domain === CIRIS_DOMAIN) {
+    return 'partner';
   }
 
   // Map org roles to user roles
   switch (orgRole) {
     case OrgRole.ADMIN:
-      return 'partner'; // Org admins are "partners" in our terminology
+      // Everyone is ORG_ADMIN of their own org — role depends on tier
+      return 'community';
     case OrgRole.KEY_MANAGER:
     case OrgRole.OPERATOR:
     case OrgRole.VIEWER:
@@ -59,76 +81,26 @@ function orgRoleToUserRole(
 }
 
 /**
- * Map our UserRole to OrgRole for new users
+ * Generate a per-user org slug from email.
+ * Each user gets their own unique org — no domain-based grouping.
  */
-function userRoleToOrgRole(userRole: UserRole): string {
-  switch (userRole) {
-    case 'admin':
-    case 'partner':
-      return OrgRole.ADMIN;
-    case 'licensee':
-    default:
-      return OrgRole.VIEWER;
-  }
+function emailToOrgSlug(email: string): string {
+  return `org-${email.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 }
 
 /**
- * CIRIS Internal Organization
- */
-const CIRIS_ORG = {
-  id: 'ciris-internal',
-  name: 'CIRIS',
-  domain: 'ciris.ai',
-};
-
-/**
- * Generate org ID from domain
- */
-function domainToOrgId(domain: string): string {
-  // Sanitize domain to create a valid org ID
-  return `org-${domain.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-}
-
-/**
- * Find an organization by its OAuth domain
- * Returns the actual org UUID, not the slug
- */
-async function findOrgByDomain(
-  domain: string
-): Promise<{ orgId: string; orgName: string } | null> {
-  try {
-    const orgsResponse = await listOrganizations({ pageSize: 100 });
-    const orgs = orgsResponse.organizations || [];
-
-    for (const org of orgs) {
-      if (org.oauthDomain?.toLowerCase() === domain.toLowerCase()) {
-        console.log(`[Auth] Found org by domain ${domain}: ${org.orgId}`);
-        return { orgId: org.orgId, orgName: org.name || domain };
-      }
-    }
-  } catch (error) {
-    console.error(`[Auth] Error searching orgs by domain:`, error);
-  }
-  return null;
-}
-
-/**
- * Check if a user exists in the registry
+ * Check if a user exists in the registry.
  *
- * Used during signIn to verify non-CIRIS users have been pre-added.
+ * Searches all orgs to find which one contains this user.
  * Returns the actual orgId (UUID) if found, null otherwise.
- * - CIRIS internal users (@ciris.ai) always allowed
- * - Other users must exist in some organization
+ * All users are allowed to self-signup; this check is for returning users.
  */
 export async function checkUserExists(
   email: string
 ): Promise<{ exists: boolean; orgId?: string; orgName?: string }> {
-  const domain = email.split('@')[1]?.toLowerCase();
-  if (!domain) return { exists: false };
-
-  // Search all orgs for this user (works for both CIRIS and external users)
+  // Search all orgs for this user
   try {
-    const orgsResponse = await listOrganizations({ pageSize: 100 });
+    const orgsResponse = await listOrganizations({ pageSize: 200 });
     const orgs = orgsResponse.organizations || [];
 
     for (const org of orgs) {
@@ -150,13 +122,6 @@ export async function checkUserExists(
     }
   } catch (error) {
     console.error(`[Auth] Error searching orgs for user ${email}:`, error);
-  }
-
-  // CIRIS internal users are always allowed even if not found yet
-  // They will be provisioned on first login
-  if (domain === CIRIS_ORG.domain) {
-    console.log(`[Auth] CIRIS user ${email} not found, will be provisioned`);
-    return { exists: true }; // No orgId yet - will be created
   }
 
   console.log(`[Auth] User ${email} not found in any organization`);
@@ -192,38 +157,32 @@ export class ProvisioningError extends Error {
 }
 
 /**
- * Get or create organization for a domain
- * Always returns the actual org UUID from the registry
+ * Get or create a per-user organization.
+ *
+ * Every user gets their own org — no domain-based grouping.
+ * Org type is determined by email domain:
+ *   @ciris.ai → ORG_INTERNAL
+ *   all others → ORG_COMMUNITY
  */
-async function getOrCreateOrganization(
-  domain: string,
-  primaryEmail: string
+async function getOrCreateUserOrganization(
+  email: string,
+  displayName: string
 ): Promise<{ orgId: string; orgName: string; isNew: boolean }> {
-  const isCirisInternal = domain.toLowerCase() === CIRIS_ORG.domain;
-  const slugId = isCirisInternal ? CIRIS_ORG.id : domainToOrgId(domain);
+  const domain = email.split('@')[1]?.toLowerCase() || '';
+  const isCirisInternal = domain === CIRIS_DOMAIN;
+  const slugId = emailToOrgSlug(email);
+  const orgType = isCirisInternal ? 'ORG_INTERNAL' : 'ORG_COMMUNITY';
+  const orgName = displayName || email.split('@')[0];
 
-  // First, try to find existing org by domain (returns real UUID)
-  const existingOrg = await findOrgByDomain(domain);
-  if (existingOrg) {
-    console.log(
-      `[Provisioning] Found existing org by domain: ${existingOrg.orgId}`
-    );
-    return {
-      orgId: existingOrg.orgId,
-      orgName: existingOrg.orgName,
-      isNew: false,
-    };
-  }
-
-  // Also try to get by slug ID (for backwards compatibility)
+  // Try to find existing per-user org by slug
   try {
     const response = await getOrganization(slugId);
     if (response.found && response.organization) {
       const actualOrgId = response.organization.orgId || slugId;
-      console.log(`[Provisioning] Found existing org by slug: ${actualOrgId}`);
+      console.log(`[Provisioning] Found existing per-user org: ${actualOrgId}`);
       return {
         orgId: actualOrgId,
-        orgName: response.organization.name || domain,
+        orgName: response.organization.name || orgName,
         isNew: false,
       };
     }
@@ -231,33 +190,39 @@ async function getOrCreateOrganization(
     // Not found by slug, will create
   }
 
-  // Organization doesn't exist, create it
+  // Create new per-user org
   console.log(
-    `[Provisioning] Creating new org: ${slugId} for domain ${domain}`
+    `[Provisioning] Creating per-user org: ${slugId} for ${email} (${orgType})`
   );
 
-  const orgName = isCirisInternal ? CIRIS_ORG.name : `${domain} Organization`;
+  const metadata: Record<string, string> = {
+    autoCreated: 'true',
+    ownerEmail: email,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!isCirisInternal) {
+    metadata.tier = 'community';
+    metadata.selfSignup = 'true';
+    metadata.activationStatus = 'pending';
+  }
 
   try {
-    // Atomic creation: org + initial admin in same transaction
     const createResponse = await createOrganization({
       organization: {
         orgId: slugId,
         name: orgName,
-        primaryEmail,
+        primaryEmail: email,
         oauthProvider: 'google',
-        oauthDomain: domain,
-        orgType: isCirisInternal ? 'ORG_INTERNAL' : 'ORG_PARTNER',
+        // No oauthDomain — per-user org, not domain-based
+        orgType,
         active: true,
-        metadata: {
-          autoCreated: 'true',
-          createdAt: new Date().toISOString(),
-        },
+        metadata,
       },
       initialAdmin: {
-        email: primaryEmail,
-        name: primaryEmail.split('@')[0],
-        role: 1, // ORG_ADMIN (enum value from proto)
+        email,
+        name: displayName || email.split('@')[0],
+        role: 1, // ORG_ADMIN — every user is admin of their own org
         active: true,
       },
     });
@@ -265,7 +230,7 @@ async function getOrCreateOrganization(
     if (createResponse.error) {
       const errorMsg = createResponse.error.message || '';
 
-      // Handle "duplicate key" - org already exists, fetch it
+      // Handle "duplicate key" — org already exists (race condition), fetch it
       if (
         errorMsg.includes('duplicate') ||
         errorMsg.includes('already exists')
@@ -273,13 +238,17 @@ async function getOrCreateOrganization(
         console.log(
           `[Provisioning] Org already exists (duplicate key), fetching...`
         );
-        const existing = await findOrgByDomain(domain);
-        if (existing) {
-          return {
-            orgId: existing.orgId,
-            orgName: existing.orgName,
-            isNew: false,
-          };
+        try {
+          const existing = await getOrganization(slugId);
+          if (existing.found && existing.organization) {
+            return {
+              orgId: existing.organization.orgId || slugId,
+              orgName: existing.organization.name || orgName,
+              isNew: false,
+            };
+          }
+        } catch {
+          // Fall through to error
         }
       }
 
@@ -294,7 +263,7 @@ async function getOrCreateOrganization(
     const actualOrgId =
       createResponse.orgId || createResponse.organization?.orgId || slugId;
     console.log(
-      `[Provisioning] Created org: ${actualOrgId} with initial admin`
+      `[Provisioning] Created per-user org: ${actualOrgId} for ${email}`
     );
     return { orgId: actualOrgId, orgName, isNew: true };
   } catch (error) {
@@ -305,134 +274,28 @@ async function getOrCreateOrganization(
     const err = error as { code?: number; message?: string };
     const errorMsg = err.message || '';
 
-    // Handle "duplicate key" - org or user already exists
+    // Handle "duplicate key" — race condition
     if (errorMsg.includes('duplicate') || errorMsg.includes('already exists')) {
       console.log(
         `[Provisioning] Duplicate key error, fetching existing org...`
       );
-      const existing = await findOrgByDomain(domain);
-      if (existing) {
-        return {
-          orgId: existing.orgId,
-          orgName: existing.orgName,
-          isNew: false,
-        };
+      try {
+        const existing = await getOrganization(slugId);
+        if (existing.found && existing.organization) {
+          return {
+            orgId: existing.organization.orgId || slugId,
+            orgName: existing.organization.name || orgName,
+            isNew: false,
+          };
+        }
+      } catch {
+        // Fall through to error
       }
     }
 
     console.error('[Provisioning] Error creating organization:', error);
     throw new ProvisioningError(
-      `Failed to create organization for ${domain}`,
-      'ORG_CREATE_FAILED',
-      true
-    );
-  }
-}
-
-/**
- * Get or create a COMMUNITY organization for self-signup users.
- * Unlike partner/internal orgs, community orgs:
- * - Have orgType ORG_COMMUNITY
- * - Are restricted to community templates (echo, default)
- * - Have tier metadata for Stripe integration
- */
-async function getOrCreateCommunityOrganization(
-  domain: string,
-  primaryEmail: string
-): Promise<{ orgId: string; orgName: string; isNew: boolean }> {
-  const slugId = domainToOrgId(domain);
-
-  // Check if a community org already exists for this domain
-  const existingOrg = await findOrgByDomain(domain);
-  if (existingOrg) {
-    console.log(
-      `[Provisioning] Found existing community org: ${existingOrg.orgId}`
-    );
-    return {
-      orgId: existingOrg.orgId,
-      orgName: existingOrg.orgName,
-      isNew: false,
-    };
-  }
-
-  // Create a new community org
-  const orgName = `${domain} (Community)`;
-
-  try {
-    const createResponse = await createOrganization({
-      organization: {
-        orgId: slugId,
-        name: orgName,
-        primaryEmail,
-        oauthProvider: 'google',
-        oauthDomain: domain,
-        orgType: 'ORG_COMMUNITY',
-        active: true,
-        metadata: {
-          autoCreated: 'true',
-          selfSignup: 'true',
-          tier: 'community',
-          activationStatus: 'pending',
-          createdAt: new Date().toISOString(),
-        },
-      },
-      initialAdmin: {
-        email: primaryEmail,
-        name: primaryEmail.split('@')[0],
-        role: 1, // ORG_ADMIN
-        active: true,
-      },
-    });
-
-    if (createResponse.error) {
-      const errorMsg = createResponse.error.message || '';
-      if (
-        errorMsg.includes('duplicate') ||
-        errorMsg.includes('already exists')
-      ) {
-        const existing = await findOrgByDomain(domain);
-        if (existing) {
-          return {
-            orgId: existing.orgId,
-            orgName: existing.orgName,
-            isNew: false,
-          };
-        }
-      }
-      throw new ProvisioningError(
-        `Failed to create community organization: ${errorMsg}`,
-        'ORG_CREATE_FAILED',
-        true
-      );
-    }
-
-    const actualOrgId =
-      createResponse.orgId || createResponse.organization?.orgId || slugId;
-    console.log(
-      `[Provisioning] Created community org: ${actualOrgId} for ${domain}`
-    );
-    return { orgId: actualOrgId, orgName, isNew: true };
-  } catch (error) {
-    if (error instanceof ProvisioningError) throw error;
-
-    const err = error as { message?: string };
-    if (
-      err.message?.includes('duplicate') ||
-      err.message?.includes('already exists')
-    ) {
-      const existing = await findOrgByDomain(domain);
-      if (existing) {
-        return {
-          orgId: existing.orgId,
-          orgName: existing.orgName,
-          isNew: false,
-        };
-      }
-    }
-
-    console.error('[Provisioning] Error creating community org:', error);
-    throw new ProvisioningError(
-      `Failed to create community organization for ${domain}`,
+      `Failed to create organization for ${email}`,
       'ORG_CREATE_FAILED',
       true
     );
@@ -446,8 +309,7 @@ async function getOrCreateUser(
   orgId: string,
   email: string,
   name: string,
-  defaultRole: UserRole,
-  isCirisInternal: boolean
+  defaultRole: UserRole
 ): Promise<{
   userId: string;
   role: UserRole;
@@ -460,7 +322,7 @@ async function getOrCreateUser(
     if (response.user) {
       const role = orgRoleToUserRole(
         response.user.role || OrgRole.VIEWER,
-        isCirisInternal
+        email
       );
 
       console.log(
@@ -473,11 +335,9 @@ async function getOrCreateUser(
           user: {
             orgId,
             userId: response.user.userId,
-            // Just updating triggers lastLoginAt update on backend
           },
         });
       } catch (updateErr) {
-        // Non-fatal, just log
         console.warn('[Provisioning] Failed to update last login:', updateErr);
       }
 
@@ -509,14 +369,14 @@ async function getOrCreateUser(
         orgId,
         email,
         displayName: name,
-        role: userRoleToOrgRole(defaultRole),
+        role: OrgRole.ADMIN, // Everyone is ORG_ADMIN of their own org
       },
     });
 
     if (createResponse.error) {
       const errorMsg = createResponse.error.message || '';
 
-      // Handle "duplicate key" - user already exists, try to fetch
+      // Handle "duplicate key" — user already exists, try to fetch
       if (
         errorMsg.includes('duplicate') ||
         errorMsg.includes('already exists')
@@ -529,7 +389,7 @@ async function getOrCreateUser(
           if (existingResponse.user) {
             const role = orgRoleToUserRole(
               existingResponse.user.role || OrgRole.VIEWER,
-              isCirisInternal
+              email
             );
             return {
               userId: existingResponse.user.userId,
@@ -549,7 +409,6 @@ async function getOrCreateUser(
       );
     }
 
-    // Extract user ID from response
     const userId =
       createResponse.userId ||
       createResponse.user?.userId ||
@@ -565,7 +424,7 @@ async function getOrCreateUser(
     const err = error as { code?: number; message?: string };
     const errorMsg = err.message || '';
 
-    // Handle "duplicate key" - user already exists
+    // Handle "duplicate key" — user already exists
     if (errorMsg.includes('duplicate') || errorMsg.includes('already exists')) {
       console.log(`[Provisioning] Duplicate key error, fetching user...`);
       try {
@@ -573,7 +432,7 @@ async function getOrCreateUser(
         if (existingResponse.user) {
           const role = orgRoleToUserRole(
             existingResponse.user.role || OrgRole.VIEWER,
-            isCirisInternal
+            email
           );
           return {
             userId: existingResponse.user.userId,
@@ -596,11 +455,25 @@ async function getOrCreateUser(
 }
 
 /**
- * Provision a user on OAuth login
+ * Determine the portal role for a new user based on email.
  *
- * This is the main entry point called from NextAuth callbacks.
- * It ensures the user and their organization exist in the registry.
- * Always returns actual org UUIDs from the registry, never slugs.
+ * - Bootstrap system admin (eric@ciris.ai) → admin
+ * - CIRIS internal (@ciris.ai) → partner (elevated, not system admin)
+ * - Everyone else → community
+ */
+function determineNewUserRole(email: string): UserRole {
+  const lower = email.toLowerCase();
+  if (lower === BOOTSTRAP_SYSTEM_ADMIN) return 'admin';
+  if (lower.endsWith(`@${CIRIS_DOMAIN}`)) return 'partner';
+  return 'community';
+}
+
+/**
+ * Provision a user on OAuth login.
+ *
+ * Main entry point called from NextAuth callbacks.
+ * Each user gets their own unique org (1:1 user:org).
+ * Returns actual org UUIDs from the registry, never slugs.
  */
 export async function provisionUser(
   email: string,
@@ -617,13 +490,11 @@ export async function provisionUser(
     );
   }
 
-  const isCirisInternal = domain === CIRIS_ORG.domain;
-
   console.log(
     `[Provisioning] Starting for ${email} (domain: ${domain}, provider: ${oauthProvider})`
   );
 
-  // First, check if user already exists in any org (returns real UUID)
+  // Check if user already exists in any org (returning user)
   const existingUser = await checkUserExists(email);
 
   let orgId: string;
@@ -631,53 +502,39 @@ export async function provisionUser(
   let isNewOrg = false;
 
   if (existingUser.exists && existingUser.orgId) {
-    // User already exists - use their existing org (real UUID)
+    // Returning user — use their existing per-user org
     orgId = existingUser.orgId;
     orgName = existingUser.orgName || orgId;
     console.log(`[Provisioning] Using existing org ${orgId} for ${email}`);
-  } else if (isCirisInternal) {
-    // CIRIS internal users - auto-create org/user if needed
-    const orgResult = await getOrCreateOrganization(domain, email);
-    orgId = orgResult.orgId;
-    orgName = orgResult.orgName;
-    isNewOrg = orgResult.isNew;
   } else {
-    // Non-CIRIS user not found in any org → auto-create community org
-    console.log(
-      `[Provisioning] Auto-creating community org for ${email} (domain: ${domain})`
-    );
-    const orgResult = await getOrCreateCommunityOrganization(domain, email);
+    // New user — create per-user org (type determined by domain)
+    const orgResult = await getOrCreateUserOrganization(email, name);
     orgId = orgResult.orgId;
     orgName = orgResult.orgName;
     isNewOrg = orgResult.isNew;
   }
 
-  // Determine default role for new users
-  const defaultRole: UserRole = isCirisInternal
-    ? 'admin'
-    : existingUser.exists
-      ? 'licensee'
-      : 'community';
+  // Determine role for this user
+  const defaultRole = determineNewUserRole(email);
 
-  // Get or create user in the org
+  // Get or create user in their org
   const {
     userId,
     role,
     isNew: isNewUser,
-  } = await getOrCreateUser(orgId, email, name, defaultRole, isCirisInternal);
+  } = await getOrCreateUser(orgId, email, name, defaultRole);
 
-  // CIRIS internal users also need a system_user record for admin access
-  if (isCirisInternal) {
+  // Only the bootstrap system admin gets a SYSTEM_ADMIN record
+  if (email.toLowerCase() === BOOTSTRAP_SYSTEM_ADMIN) {
     try {
       await createSystemUser({
         email,
         name,
         role: 'SYSTEM_ADMIN',
       });
-      console.log(`[Provisioning] Created system user for ${email}`);
+      console.log(`[Provisioning] Created/verified system admin for ${email}`);
     } catch (error) {
       const err = error as { message?: string };
-      // Ignore duplicate key errors - user already exists as system user
       if (
         !err.message?.includes('duplicate') &&
         !err.message?.includes('already exists')
@@ -710,11 +567,7 @@ export async function provisionUser(
 }
 
 /**
- * Fallback is no longer supported - registry must be available
- *
- * Previously this used slugs like 'ciris-internal' which don't match
- * the actual UUIDs in the registry, causing all subsequent queries to fail.
- * Now we require the registry to be available for login.
+ * Fallback is no longer supported — registry must be available.
  */
 export function getFallbackUserInfo(email: string, _name: string): never {
   console.error(
