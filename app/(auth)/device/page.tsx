@@ -12,7 +12,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import type { AllowedTemplate } from '@/lib/device-auth/abac';
 
 type AgentCategory = 'ciris' | 'non_ciris';
@@ -328,12 +327,6 @@ function DeviceAuthFlow() {
                   <p>
                     <span className="font-medium">Template:</span>{' '}
                     {selectedTemplate}
-                  </p>
-                )}
-                {selectedAdapters.length > 0 && (
-                  <p>
-                    <span className="font-medium">Adapters:</span>{' '}
-                    {selectedAdapters.join(', ')}
                   </p>
                 )}
               </div>
@@ -652,42 +645,7 @@ function DeviceAuthFlow() {
             </Card>
           )}
 
-        {/* Step 3: Adapter Selection */}
-        {selectedTemplate && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Configure Adapters</CardTitle>
-              <CardDescription>
-                Select which adapters this agent should use. Defaults are
-                pre-selected from the template.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2">
-                {getAvailableAdapters(deviceData, selectedTemplate).map(
-                  (adapter) => (
-                    <label
-                      key={adapter}
-                      className="flex items-center gap-2 rounded-md border border-gray-100 px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      <Checkbox
-                        checked={selectedAdapters.includes(adapter)}
-                        onCheckedChange={(checked) => {
-                          setSelectedAdapters((prev) =>
-                            checked
-                              ? [...prev, adapter]
-                              : prev.filter((a) => a !== adapter)
-                          );
-                        }}
-                      />
-                      <span className="text-gray-700">{adapter}</span>
-                    </label>
-                  )
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Adapters: community tier uses template defaults (no selection) */}
 
         {/* Step 4: Pricing Summary + Checkout */}
         {selectedTemplate && agentCategory && (
@@ -760,26 +718,6 @@ function DeviceAuthFlow() {
       </div>
     </CenterLayout>
   );
-}
-
-/**
- * Get the union of template adapters + node-supported adapters for selection.
- */
-function getAvailableAdapters(
-  data: DeviceLookupResponse,
-  templateId: string
-): string[] {
-  const tpl = data.allowed_templates.find((t) => t.id === templateId);
-  if (!tpl) return [];
-
-  const nodeCaps = data.node_manifest?.node_capabilities as
-    | Record<string, unknown>
-    | undefined;
-  const nodeAdapters = (nodeCaps?.supported_adapters as string[]) || [];
-
-  // Union of template adapters and node-supported adapters
-  const all = new Set([...tpl.adapters, ...nodeAdapters]);
-  return Array.from(all).sort();
 }
 
 function CenterLayout({ children }: { children: React.ReactNode }) {
