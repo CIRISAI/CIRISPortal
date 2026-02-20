@@ -91,6 +91,36 @@ export async function initializeDatabase(): Promise<void> {
       ON device_auth_sessions((data->>'stripeSessionId'));
   `);
 
+  // Create key_activations table for tracking key-agent bindings
+  // This is CRITICAL for detecting key reuse across agents
+  // Keys are tied to ONE agent instance - reuse is FORBIDDEN
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS key_activations (
+      id SERIAL PRIMARY KEY,
+      public_key_hash TEXT UNIQUE NOT NULL,  -- Hex-encoded Ed25519 public key
+      device_code TEXT NOT NULL,             -- Device code from provisioning
+      user_code TEXT NOT NULL,               -- Human-readable code
+      org_id TEXT NOT NULL,                  -- Organization ID
+      key_id TEXT,                           -- CIRISRegistry key ID
+      agent_hash TEXT,                       -- Agent binary hash (for audit)
+      activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      revoked_at TIMESTAMPTZ,                -- Set if key is revoked due to reuse
+      revocation_reason TEXT                 -- Why key was revoked
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_key_activations_pubkey
+      ON key_activations(public_key_hash);
+    CREATE INDEX IF NOT EXISTS idx_key_activations_org
+      ON key_activations(org_id);
+    CREATE INDEX IF NOT EXISTS idx_key_activations_device
+      ON key_activations(device_code);
+
+    COMMENT ON TABLE key_activations IS
+      'Tracks Ed25519 key activations to prevent key reuse across agents. '
+      'Keys are tied to ONE agent identity. Reuse is forbidden. '
+      'Transferring agent identities to a new device is NOT SUPPORTED YET.';
+  `);
+
   console.log('[DB] Database initialized');
 }
 
