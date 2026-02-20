@@ -88,12 +88,12 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-50 to-white">
       <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-8 shadow-lg">
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <h1 className="mb-2 text-3xl font-bold text-gray-900">
             CIRIS<span className="text-emerald-600">Portal</span>
           </h1>
-          <p className="text-gray-600">
-            Sign in to manage your agent identities
+          <p className="text-sm text-gray-600">
+            Agent Identity Registration &amp; Verification
           </p>
           {isDevTest && (
             <span
@@ -103,6 +103,84 @@ function LoginForm() {
               Development Mode
             </span>
           )}
+        </div>
+
+        {/* What is CIRIS Portal */}
+        <div className="mb-6 rounded-lg bg-gray-50 p-4">
+          <p className="mb-3 text-center text-sm text-gray-700">
+            CIRISPortal issues <strong>cryptographic identities</strong> for AI
+            agents, enabling tamper-evident audit trails and participation in
+            the <strong>Coherence Ratchet</strong> &mdash; a mathematical
+            framework where coordinated deception becomes harder over time.
+          </p>
+          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <strong>Note:</strong> CIRIS agent identities are purchased during
+            the agent&apos;s first-time setup flow. Get the mobile app on{' '}
+            <a
+              href="https://play.google.com/store/apps/details?id=ai.ciris.mobile"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-amber-900"
+            >
+              Google Play
+            </a>{' '}
+            or{' '}
+            <a
+              href="https://testflight.apple.com/join/ciris"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-amber-900"
+            >
+              TestFlight
+            </a>
+            , or try{' '}
+            <a
+              href="https://scout.ciris.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-amber-900"
+            >
+              Scout
+            </a>{' '}
+            — a sample CIRIS agent.
+          </div>
+          <div className="mt-2 text-center text-xs text-gray-500">
+            <a
+              href="https://github.com/CIRISAI/CIRISAgent"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-gray-700"
+            >
+              Agent
+            </a>
+            {' · '}
+            <a
+              href="https://github.com/CIRISAI/CIRISRegistry"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-gray-700"
+            >
+              Registry
+            </a>
+            {' · '}
+            <a
+              href="https://github.com/CIRISAI/CIRISVerify"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-gray-700"
+            >
+              Verify
+            </a>
+            {' · '}
+            <a
+              href="https://github.com/CIRISAI"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-gray-700"
+            >
+              Learn more →
+            </a>
+          </div>
         </div>
 
         {error && (
@@ -149,24 +227,32 @@ function LoginForm() {
             className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/50 p-4"
           >
             <p className="text-center text-sm font-medium text-emerald-800">
-              Get started with a Community identity
+              CIRIS Community Identity
             </p>
             <ul className="mt-2 space-y-1 text-xs text-emerald-700">
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Hardware-bound agent identity
+                Cryptographically-signed audit trail
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Basic registry verification
+                Contributes to Coherence Ratchet
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Echo &amp; Default templates
+                CIRIS Scoring for integrity measurement
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-500">&#10003;</span>
+                Ally template (Community tier)
               </li>
             </ul>
             <p className="mt-3 text-center text-xs text-gray-500">
-              $1.50 per agent identity ($0.50 fee + $1.00 bond)
+              $1.50 per identity ($0.50 fee + $1.00 refundable bond)
+            </p>
+            <p className="mt-2 text-center text-xs text-gray-400">
+              Non-CIRIS identities are stored but do not participate in
+              provenance verification
             </p>
           </div>
         )}

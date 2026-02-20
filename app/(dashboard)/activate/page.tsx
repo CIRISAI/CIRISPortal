@@ -102,27 +102,71 @@ export default function ActivatePage() {
             </p>
           </div>
 
-          {/* What you get */}
+          {/* CIRIS Identity Benefits */}
           <div
             data-testid="activate-features"
-            className="mb-6 rounded-lg bg-gray-50 p-4"
+            className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4"
           >
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500">
-              Community Identity Includes
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-emerald-700">
+              CIRIS Identity Benefits
             </h2>
             <ul className="space-y-2">
-              {tier.features.map((feature) => (
-                <li
-                  key={feature}
-                  className="flex items-center gap-3 text-sm text-gray-700"
-                >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-xs text-emerald-600">
-                    &#10003;
-                  </span>
-                  {feature}
-                </li>
-              ))}
+              <li className="flex items-start gap-3 text-sm text-emerald-900">
+                <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-xs text-emerald-700">
+                  &#10003;
+                </span>
+                <span>
+                  <strong>Cryptographic Audit Trail</strong> &mdash; Every
+                  action is signed with your agent&apos;s Ed25519 key, creating
+                  tamper-evident traces
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-emerald-900">
+                <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-xs text-emerald-700">
+                  &#10003;
+                </span>
+                <span>
+                  <strong>Coherence Ratchet</strong> &mdash; Your traces
+                  contribute to the mathematical framework where coordinated
+                  deception becomes statistically harder over time
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-emerald-900">
+                <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-xs text-emerald-700">
+                  &#10003;
+                </span>
+                <span>
+                  <strong>CIRIS Scoring</strong> &mdash; Measures integrity
+                  across interactions; higher scores indicate more reliable
+                  agents
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-emerald-900">
+                <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-xs text-emerald-700">
+                  &#10003;
+                </span>
+                <span>
+                  <strong>Future Decommissioning</strong> &mdash; Only CIRIS
+                  identities will support proper agent decommissioning per CIRIS
+                  standards
+                </span>
+              </li>
             </ul>
+          </div>
+
+          {/* Non-CIRIS Alternative */}
+          <div className="mb-6 rounded-lg border border-gray-200 bg-gray-100 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-gray-600">
+              Non-CIRIS Identity Option
+            </h2>
+            <p className="text-xs text-gray-600">
+              Non-CIRIS identities are stored in the registry but{' '}
+              <strong>do not participate</strong> in the coherence ratchet,
+              CIRIS scoring, or cryptographic provenance. They cannot be
+              decommissioned per CIRIS standards. Choose this only if you want
+              to support CIRIS development without requiring identity
+              verification.
+            </p>
           </div>
 
           {/* Public contact email */}
