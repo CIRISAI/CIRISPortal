@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const record = getByUserCode(code);
+    const record = await getByUserCode(code);
     if (!record) {
       return NextResponse.json(
         { error: 'Invalid or expired device code' },

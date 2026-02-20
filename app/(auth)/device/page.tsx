@@ -300,21 +300,32 @@ function DeviceAuthFlow() {
         <Card className="w-full max-w-lg">
           <CardHeader>
             <CardTitle className="text-emerald-600">
-              Agent Provisioned
+              Purchase Complete!
             </CardTitle>
             <CardDescription>
-              Your agent has been registered and a signing key has been issued.
+              Your agent identity has been provisioned and a signing key issued.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-lg bg-emerald-50 p-4">
-              <p className="text-sm font-medium text-emerald-800">
-                Return to the installation wizard to complete your license
-                acquisition.
+            <div className="rounded-lg bg-emerald-50 p-6 text-center">
+              <p className="text-lg font-medium text-emerald-800">
+                Return to the setup wizard to complete your agent configuration.
+              </p>
+              <p className="mt-2 text-sm text-emerald-700">
+                Your agent is now polling for the provisioned key and will
+                automatically continue setup.
               </p>
             </div>
+            <div className="flex justify-center">
+              <button
+                onClick={() => window.close()}
+                className="rounded-lg bg-emerald-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-emerald-700"
+              >
+                Close This Page
+              </button>
+            </div>
             {(selectedTemplate || agentCategory) && (
-              <div className="space-y-1 text-sm text-gray-600">
+              <div className="space-y-1 border-t pt-4 text-center text-sm text-gray-600">
                 {agentCategory && (
                   <p>
                     <span className="font-medium">Agent Type:</span>{' '}

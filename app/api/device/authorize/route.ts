@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const record = createDeviceAuth(portal_url, {}, agent_info || {});
+    const record = await createDeviceAuth(portal_url, {}, agent_info || {});
 
     // RFC 8628 response format + attestation challenge
     return NextResponse.json({

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Look up device auth record
-    const record = getByUserCode(user_code);
+    const record = await getByUserCode(user_code);
     if (!record) {
       return NextResponse.json(
         { error: 'Invalid or expired device code' },
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     const selectedAdapters: string[] = adapters || template.adapters;
 
     // Save selections to device record (persisted across Stripe redirect)
-    updateRecord(record.deviceCode, {
+    await updateRecord(record.deviceCode, {
       userId: session.user.email,
       orgId,
       selectedTemplate: template_id,
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Store Stripe session ID on the device record
-    updateRecord(record.deviceCode, {
+    await updateRecord(record.deviceCode, {
       stripeSessionId: checkoutSession.id,
     });
 

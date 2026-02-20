@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
           );
 
           // Mark device auth record as paid (if this was a device auth checkout)
-          markDevicePaymentComplete(session.id);
+          await markDevicePaymentComplete(session.id);
 
           // Auto-generate key for the org that paid
           if (metadata.org_id && metadata.user_id) {

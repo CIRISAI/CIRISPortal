@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const record = getByDeviceCode(device_code);
+    const record = await getByDeviceCode(device_code);
 
     if (!record) {
       return NextResponse.json(
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
       case 'provisioned': {
         // Key is ready — consume it (one-time delivery)
-        const result = consumeProvisionedKey(device_code);
+        const result = await consumeProvisionedKey(device_code);
         if (!result) {
           return NextResponse.json(
             {

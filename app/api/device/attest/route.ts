@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     }
 
     // Look up device record by device code (agent's secret)
-    const record = getByDeviceCode(device_code);
+    const record = await getByDeviceCode(device_code);
     if (!record) {
       return NextResponse.json(
         { error: 'Invalid or expired device code' },
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
 
     if (result.verified) {
       // Store attestation data on the device record
-      updateRecord(record.deviceCode, {
+      await updateRecord(record.deviceCode, {
         attestationProof: attestation_proof as unknown as Record<
           string,
           unknown
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
 
       // Update agent info with the verified hash
       if (agent_hash) {
-        updateRecord(record.deviceCode, {
+        await updateRecord(record.deviceCode, {
           agentInfo: {
             ...record.agentInfo,
             agentHash: agent_hash,

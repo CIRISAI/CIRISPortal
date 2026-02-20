@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     // Look up device auth record
-    const record = getByUserCode(user_code);
+    const record = await getByUserCode(user_code);
     if (!record) {
       return NextResponse.json(
         { error: 'Invalid or expired device code' },
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       if (record.stripeSessionId) {
         const paid = await verifyCheckoutSession(record.stripeSessionId);
         if (paid) {
-          updateRecord(record.deviceCode, { paymentComplete: true });
+          await updateRecord(record.deviceCode, { paymentComplete: true });
         } else {
           return NextResponse.json(
             {
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     const selectedAdapters: string[] = adapters || template.adapters;
 
     // Mark as authorized with user info
-    updateRecord(record.deviceCode, {
+    await updateRecord(record.deviceCode, {
       status: 'authorized',
       userId: session.user.email,
       orgId,
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
       });
     } catch (keyError: any) {
       console.error('[Device Auth] Key generation failed:', keyError);
-      updateRecord(record.deviceCode, { status: 'denied' });
+      await updateRecord(record.deviceCode, { status: 'denied' });
       return NextResponse.json(
         {
           error: 'Key generation failed',
@@ -254,7 +254,7 @@ export async function POST(request: Request) {
     }
 
     // Complete provisioning — next agent poll will get the key
-    completeProvisioning(
+    await completeProvisioning(
       record.deviceCode,
       {
         ed25519PrivateKey: toBase64(privateKeyBytes),
@@ -273,7 +273,7 @@ export async function POST(request: Request) {
 
     // Set package download URL on the record if applicable
     if (packageDownloadUrl) {
-      updateRecord(record.deviceCode, { packageDownloadUrl });
+      await updateRecord(record.deviceCode, { packageDownloadUrl });
     }
 
     return NextResponse.json({

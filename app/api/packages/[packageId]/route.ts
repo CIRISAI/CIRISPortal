@@ -61,7 +61,7 @@ export async function GET(
     if (deviceCode) {
       // Validate via device auth store
       const { getByDeviceCode } = await import('@/lib/device-auth/store');
-      const record = getByDeviceCode(deviceCode);
+      const record = await getByDeviceCode(deviceCode);
 
       if (!record || record.status !== 'provisioned') {
         return NextResponse.json(

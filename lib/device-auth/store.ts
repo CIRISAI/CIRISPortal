@@ -1,16 +1,21 @@
 /**
- * Device auth code storage with TTL.
+ * Device auth code storage with PostgreSQL persistence.
  *
  * Implements RFC 8628 device code storage for the "Acquire a License"
  * provisioning flow. Agents initiate a device auth session, users
  * authenticate in the browser, and the provisioned key is delivered
  * back to the agent via polling.
  *
- * TODO: Migrate from in-memory Map to Cloudflare KV for production
- * (currently MVP: in-memory with periodic cleanup).
+ * Uses PostgreSQL for persistence across restarts and multiple instances.
  */
 
 import crypto from 'crypto';
+import {
+  query,
+  queryOne,
+  initializeDatabase,
+  cleanupExpiredSessions,
+} from '@/lib/db/client';
 
 export interface DeviceAuthAgentInfo {
   agentHash?: string;
@@ -58,7 +63,9 @@ export interface DeviceAuthRecord {
 
 const DEVICE_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // Cleanup every minute
-const USER_CODE_LENGTH = 8; // e.g., "ABCD-1234"
+
+let dbInitialized = false;
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Generate a cryptographically random device code (opaque).
@@ -84,35 +91,60 @@ function generateUserCode(): string {
   return code;
 }
 
-// TODO: Replace with Cloudflare KV for production persistence
-// across worker instances and restarts. MVP: in-memory Map.
-const store = new Map<string, DeviceAuthRecord>();
-const userCodeIndex = new Map<string, string>(); // userCode → deviceCode
+/**
+ * Ensure database is initialized.
+ */
+async function ensureInitialized(): Promise<void> {
+  if (!dbInitialized) {
+    await initializeDatabase();
+    dbInitialized = true;
+    startCleanup();
+  }
+}
 
-let cleanupTimer: ReturnType<typeof setInterval> | null = null;
-
-function startCleanup() {
+/**
+ * Start periodic cleanup of expired sessions.
+ */
+function startCleanup(): void {
   if (cleanupTimer) return;
-  cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, record] of store.entries()) {
-      if (now >= record.expiresAt) {
-        store.delete(key);
-        userCodeIndex.delete(record.userCode);
+  cleanupTimer = setInterval(async () => {
+    try {
+      const count = await cleanupExpiredSessions();
+      if (count > 0) {
+        console.log(`[Device Auth] Cleaned up ${count} expired sessions`);
       }
+    } catch (err) {
+      console.error('[Device Auth] Cleanup error:', err);
     }
   }, CLEANUP_INTERVAL_MS);
 }
 
 /**
+ * Convert database row to DeviceAuthRecord.
+ */
+function rowToRecord(row: {
+  device_code: string;
+  user_code: string;
+  data: DeviceAuthRecord;
+  expires_at: Date;
+}): DeviceAuthRecord {
+  return {
+    ...row.data,
+    deviceCode: row.device_code,
+    userCode: row.user_code,
+    expiresAt: row.expires_at.getTime(),
+  };
+}
+
+/**
  * Create a new device auth session.
  */
-export function createDeviceAuth(
+export async function createDeviceAuth(
   portalUrl: string,
   nodeManifest: Record<string, unknown>,
   agentInfo: DeviceAuthAgentInfo
-): DeviceAuthRecord {
-  startCleanup();
+): Promise<DeviceAuthRecord> {
+  await ensureInitialized();
 
   const now = Date.now();
   const record: DeviceAuthRecord = {
@@ -127,8 +159,16 @@ export function createDeviceAuth(
     expiresAt: now + DEVICE_CODE_TTL_MS,
   };
 
-  store.set(record.deviceCode, record);
-  userCodeIndex.set(record.userCode, record.deviceCode);
+  await query(
+    `INSERT INTO device_auth_sessions (device_code, user_code, data, expires_at)
+     VALUES ($1, $2, $3, to_timestamp($4 / 1000.0))`,
+    [
+      record.deviceCode,
+      record.userCode,
+      JSON.stringify(record),
+      record.expiresAt,
+    ]
+  );
 
   return record;
 }
@@ -136,40 +176,72 @@ export function createDeviceAuth(
 /**
  * Look up a record by device code (agent polling).
  */
-export function getByDeviceCode(
+export async function getByDeviceCode(
   deviceCode: string
-): DeviceAuthRecord | undefined {
-  const record = store.get(deviceCode);
-  if (!record) return undefined;
-  if (Date.now() >= record.expiresAt) {
-    store.delete(deviceCode);
-    userCodeIndex.delete(record.userCode);
-    return undefined;
-  }
-  return record;
+): Promise<DeviceAuthRecord | undefined> {
+  await ensureInitialized();
+
+  const row = await queryOne<{
+    device_code: string;
+    user_code: string;
+    data: DeviceAuthRecord;
+    expires_at: Date;
+  }>(
+    `SELECT device_code, user_code, data, expires_at
+     FROM device_auth_sessions
+     WHERE device_code = $1 AND expires_at > NOW()`,
+    [deviceCode]
+  );
+
+  if (!row) return undefined;
+  return rowToRecord(row);
 }
 
 /**
  * Look up a record by user code (Portal UI).
  */
-export function getByUserCode(userCode: string): DeviceAuthRecord | undefined {
-  const deviceCode = userCodeIndex.get(userCode.toUpperCase());
-  if (!deviceCode) return undefined;
-  return getByDeviceCode(deviceCode);
+export async function getByUserCode(
+  userCode: string
+): Promise<DeviceAuthRecord | undefined> {
+  await ensureInitialized();
+
+  const row = await queryOne<{
+    device_code: string;
+    user_code: string;
+    data: DeviceAuthRecord;
+    expires_at: Date;
+  }>(
+    `SELECT device_code, user_code, data, expires_at
+     FROM device_auth_sessions
+     WHERE user_code = $1 AND expires_at > NOW()`,
+    [userCode.toUpperCase()]
+  );
+
+  if (!row) return undefined;
+  return rowToRecord(row);
 }
 
 /**
  * Update a record (e.g., set user info after OAuth, or provision key).
  */
-export function updateRecord(
+export async function updateRecord(
   deviceCode: string,
   updates: Partial<DeviceAuthRecord>
-): DeviceAuthRecord | undefined {
-  const record = getByDeviceCode(deviceCode);
-  if (!record) return undefined;
+): Promise<DeviceAuthRecord | undefined> {
+  await ensureInitialized();
 
-  const updated = { ...record, ...updates };
-  store.set(deviceCode, updated);
+  const existing = await getByDeviceCode(deviceCode);
+  if (!existing) return undefined;
+
+  const updated: DeviceAuthRecord = { ...existing, ...updates };
+
+  await query(
+    `UPDATE device_auth_sessions
+     SET data = $1
+     WHERE device_code = $2`,
+    [JSON.stringify(updated), deviceCode]
+  );
+
   return updated;
 }
 
@@ -177,11 +249,11 @@ export function updateRecord(
  * Mark a record as provisioned with the signing key and agent metadata.
  * After this, the next agent poll will receive the key (one-time delivery).
  */
-export function completeProvisioning(
+export async function completeProvisioning(
   deviceCode: string,
   key: ProvisionedKey,
   agentRecord: DeviceAuthRecord['agentRecord']
-): DeviceAuthRecord | undefined {
+): Promise<DeviceAuthRecord | undefined> {
   return updateRecord(deviceCode, {
     status: 'provisioned',
     provisionedKey: key,
@@ -193,15 +265,18 @@ export function completeProvisioning(
  * Consume the provisioned key (agent retrieves it, then it's cleared
  * from the record to prevent re-retrieval).
  */
-export function consumeProvisionedKey(deviceCode: string):
+export async function consumeProvisionedKey(deviceCode: string): Promise<
   | {
       key: ProvisionedKey;
       agentRecord: DeviceAuthRecord['agentRecord'];
       portalUrl: string;
       packageDownloadUrl?: string;
     }
-  | undefined {
-  const record = getByDeviceCode(deviceCode);
+  | undefined
+> {
+  await ensureInitialized();
+
+  const record = await getByDeviceCode(deviceCode);
   if (!record || record.status !== 'provisioned' || !record.provisionedKey) {
     return undefined;
   }
@@ -213,9 +288,10 @@ export function consumeProvisionedKey(deviceCode: string):
     packageDownloadUrl: record.packageDownloadUrl,
   };
 
-  // Clear the private key from the store after delivery
-  store.delete(deviceCode);
-  userCodeIndex.delete(record.userCode);
+  // Delete the record after delivery (one-time)
+  await query('DELETE FROM device_auth_sessions WHERE device_code = $1', [
+    deviceCode,
+  ]);
 
   return result;
 }
@@ -224,18 +300,44 @@ export function consumeProvisionedKey(deviceCode: string):
  * Mark device auth records as paid by Stripe session ID.
  * Called from the Stripe webhook when checkout.session.completed fires.
  */
-export function markDevicePaymentComplete(stripeSessionId: string): boolean {
-  for (const record of store.values()) {
-    if (record.stripeSessionId === stripeSessionId) {
-      record.paymentComplete = true;
-      store.set(record.deviceCode, record);
-      console.log(
-        `[Device Auth] Payment complete for device ${record.userCode} (Stripe session ${stripeSessionId})`
-      );
-      return true;
-    }
+export async function markDevicePaymentComplete(
+  stripeSessionId: string
+): Promise<boolean> {
+  await ensureInitialized();
+
+  const row = await queryOne<{
+    device_code: string;
+    user_code: string;
+    data: DeviceAuthRecord;
+    expires_at: Date;
+  }>(
+    `SELECT device_code, user_code, data, expires_at
+     FROM device_auth_sessions
+     WHERE data->>'stripeSessionId' = $1 AND expires_at > NOW()`,
+    [stripeSessionId]
+  );
+
+  if (!row) {
+    console.log(
+      `[Device Auth] No device found for Stripe session ${stripeSessionId}`
+    );
+    return false;
   }
-  return false;
+
+  const record = rowToRecord(row);
+  record.paymentComplete = true;
+
+  await query(
+    `UPDATE device_auth_sessions
+     SET data = $1
+     WHERE device_code = $2`,
+    [JSON.stringify(record), record.deviceCode]
+  );
+
+  console.log(
+    `[Device Auth] Payment complete for device ${record.userCode} (Stripe session ${stripeSessionId})`
+  );
+  return true;
 }
 
 export const DEVICE_CODE_TTL_SECONDS = DEVICE_CODE_TTL_MS / 1000;

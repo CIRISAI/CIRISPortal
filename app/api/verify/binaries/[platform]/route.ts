@@ -40,7 +40,7 @@ export async function GET(
     // Auth: device code or session
     const deviceCode = request.headers.get('x-device-code');
     if (deviceCode) {
-      const record = getByDeviceCode(deviceCode);
+      const record = await getByDeviceCode(deviceCode);
       if (!record || record.status !== 'provisioned') {
         return NextResponse.json(
           { error: 'Invalid or unprovisioned device code' },
