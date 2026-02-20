@@ -478,6 +478,78 @@ function DeviceAuthFlow() {
           </CardContent>
         </Card>
 
+        {/* Important Information */}
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg text-amber-800">
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              Important: Key Recovery Not Possible
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-amber-900">
+            <p className="font-semibold">
+              Agent identity keys cannot be recovered. If you wipe data or
+              otherwise lose your key, it is gone forever.
+            </p>
+
+            <div>
+              <p className="font-medium">What is the identity key used for?</p>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-amber-800">
+                <li>
+                  <strong>Audit trail signing</strong> &mdash; Every agent
+                  decision is cryptographically signed, creating an externally
+                  verifiable record
+                </li>
+                <li>
+                  <strong>Tamper detection</strong> &mdash; Validates the
+                  installation has not been modified, enabling third-party
+                  verification
+                </li>
+                <li>
+                  <strong>Identity validation</strong> &mdash; Supports testing
+                  agent identity &ldquo;in the wild&rdquo; for the{' '}
+                  <a
+                    href="https://ciris.ai/coherence-ratchet"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-amber-600"
+                  >
+                    Coherence Ratchet
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    href="https://ciris.ai/ciris-scoring"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-amber-600"
+                  >
+                    CIRIS Scoring
+                  </a>{' '}
+                  research
+                </li>
+              </ul>
+            </div>
+
+            <p className="rounded-lg bg-white/50 p-3 text-amber-800">
+              <strong>Privacy:</strong> Purchasing a license does not require
+              opting in to sending traces to CIRIS L3C. Trace submission is
+              always optional and under your control.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Step 1: Register Your Agent */}
         <Card>
           <CardHeader>
