@@ -127,7 +127,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = request.nextUrl.origin;
+    // Use configured public URL, not request origin (which returns container URL in Docker)
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://portal.ciris.ai';
     const hardwareKeyHash =
       record.agentInfo.agentHash || `device-auth-${Date.now()}`;
 
