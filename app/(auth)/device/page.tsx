@@ -309,8 +309,8 @@ function DeviceAuthFlow() {
           <CardContent className="space-y-4">
             <div className="rounded-lg bg-emerald-50 p-4">
               <p className="text-sm font-medium text-emerald-800">
-                You can now return to your agent setup wizard. The agent will
-                automatically receive its signing key and configuration.
+                Return to the installation wizard to complete your license
+                acquisition.
               </p>
             </div>
             {(selectedTemplate || agentCategory) && (
