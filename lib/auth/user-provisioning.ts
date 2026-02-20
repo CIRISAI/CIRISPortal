@@ -67,17 +67,10 @@ function orgRoleToUserRole(orgRole: string, email: string): UserRole {
     return 'partner';
   }
 
-  // Map org roles to user roles
-  switch (orgRole) {
-    case OrgRole.ADMIN:
-      // Everyone is ORG_ADMIN of their own org — role depends on tier
-      return 'community';
-    case OrgRole.KEY_MANAGER:
-    case OrgRole.OPERATOR:
-    case OrgRole.VIEWER:
-    default:
-      return 'licensee';
-  }
+  // All non-CIRIS users are community tier (per-user orgs)
+  // Org role doesn't determine portal role — email domain does.
+  // TODO: When multi-user orgs are added, revisit licensee role mapping.
+  return 'community';
 }
 
 /**

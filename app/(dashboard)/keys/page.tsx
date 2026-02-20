@@ -1162,10 +1162,11 @@ export default function KeysPage() {
     '';
   const userRole = (session?.user as { role?: string })?.role || 'community';
 
-  // Role-based permissions
-  const canGenerateKeys = userRole !== 'community'; // Paid tiers only
-  const canRotateKeys = userRole !== 'community'; // Paid tiers only
-  const canRevokeKeys = userRole !== 'community'; // Paid tiers only
+  // Role-based permissions — only system admins and paid tiers get free key ops
+  const isPaidTier = userRole === 'admin' || userRole === 'partner';
+  const canGenerateKeys = isPaidTier;
+  const canRotateKeys = isPaidTier;
+  const canRevokeKeys = isPaidTier;
 
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false);

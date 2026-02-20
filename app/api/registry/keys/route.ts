@@ -177,11 +177,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Role-based action restrictions
-    // Community users have limited key management capabilities
-    const adminOnlyActions = ['rotate', 'revoke'];
+    // Only system admins and paid tiers (admin, partner) get free key ops.
+    // All other roles (community, licensee, etc.) must pay per-key.
+    const isPaidTier = userRole === 'admin' || userRole === 'partner';
 
-    if (adminOnlyActions.includes(action) && userRole === 'community') {
+    if (['rotate', 'revoke'].includes(action) && !isPaidTier) {
       return NextResponse.json(
         {
           error:
@@ -193,9 +193,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Community orgs must pay per-key activation — no free key generation.
-    // Professional+ tiers include key generation in their subscription.
-    if (action === 'generate' && userRole === 'community') {
+    if (action === 'generate' && !isPaidTier) {
       return NextResponse.json(
         {
           error:

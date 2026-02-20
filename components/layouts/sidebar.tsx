@@ -165,7 +165,7 @@ export function Sidebar() {
   const { data: session } = useSession();
 
   // @ts-expect-error - extended session type
-  const userRole = (session?.user?.role as string) || 'licensee';
+  const userRole = (session?.user?.role as string) || 'community';
 
   // Filter navigation items based on user role
   const visibleNavigation = navigation.filter(
