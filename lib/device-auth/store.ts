@@ -326,6 +326,7 @@ export async function markDevicePaymentComplete(
 
   const record = rowToRecord(row);
   record.paymentComplete = true;
+  record.status = 'authorized'; // Payment complete = authorized to proceed
 
   await query(
     `UPDATE device_auth_sessions
@@ -335,7 +336,7 @@ export async function markDevicePaymentComplete(
   );
 
   console.log(
-    `[Device Auth] Payment complete for device ${record.userCode} (Stripe session ${stripeSessionId})`
+    `[Device Auth] Payment complete, status=authorized for device ${record.userCode} (Stripe session ${stripeSessionId})`
   );
   return true;
 }
