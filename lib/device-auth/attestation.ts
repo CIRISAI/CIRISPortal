@@ -17,21 +17,23 @@ import { lookupAgent, getBuildAttestation } from '@/lib/grpc/client';
 
 export interface AttestationProof {
   /** Platform attestation blob (TPM quote, SE assertion, etc.) */
-  platform_attestation: string; // base64
-  /** Hardware-bound public key (ECDSA P-256 or Ed25519) */
-  hardware_public_key: string; // base64
+  platform_attestation: string; // hex (from CIRISVerify FFI)
+  /** Hardware-bound public key (ECDSA P-256 or Ed25519) - 32 bytes for Ed25519 */
+  hardware_public_key: string; // hex (CIRISVerify outputs hex, not base64)
   /** Algorithm: "ECDSA_P256" or "Ed25519" */
   hardware_algorithm: string;
   /** ML-DSA-65 post-quantum public key */
-  pqc_public_key: string; // base64
-  /** PQC algorithm: "ML-DSA-65" */
+  pqc_public_key: string; // hex (empty for ephemeral Ed25519 attestation)
+  /** PQC algorithm: "ML-DSA-65" or "NONE" */
   pqc_algorithm: string;
   /** The challenge nonce that was signed */
   challenge: string; // hex
-  /** Classical signature over the challenge */
-  classical_signature: string; // base64
+  /** Classical signature over the challenge - 64 bytes for Ed25519 */
+  classical_signature: string; // hex (CIRISVerify outputs hex, not base64)
   /** PQC signature over (challenge || classical_sig) */
-  pqc_signature: string; // base64
+  pqc_signature: string; // hex (empty for ephemeral Ed25519 attestation)
+  /** Key type: "ephemeral" for phase 1, "portal" for phase 2 */
+  key_type?: string;
   /** Merkle root of the transparency log */
   merkle_root: string; // hex (32 bytes)
   /** Number of transparency log entries */
@@ -91,8 +93,9 @@ export async function verifyAttestation(
 
   // 2. Verify classical signature (Ed25519) over the challenge
   try {
-    const pubKeyBytes = Buffer.from(proof.hardware_public_key, 'base64');
-    const sigBytes = Buffer.from(proof.classical_signature, 'base64');
+    // CIRISVerify FFI outputs hex-encoded public key and signature
+    const pubKeyBytes = Buffer.from(proof.hardware_public_key, 'hex');
+    const sigBytes = Buffer.from(proof.classical_signature, 'hex');
     const challengeBytes = Buffer.from(proof.challenge, 'hex');
 
     if (proof.hardware_algorithm === 'Ed25519') {
