@@ -129,14 +129,16 @@ function DeviceAuthFlow() {
     }
   }, [selectedTemplate, deviceData]);
 
-  // Auto-select CIRIS agent when attestation is verified
+  // Attestation status determines available agent categories
   const isAttested = deviceData?.attestation_verified === true;
+
+  // Non-attested agents can only be Non-CIRIS — auto-select
   useEffect(() => {
-    if (isAttested && agentCategory !== 'ciris') {
-      setAgentCategory('ciris');
+    if (deviceData && !isAttested && agentCategory !== 'non_ciris') {
+      setAgentCategory('non_ciris');
       setSelectedTemplate(null);
     }
-  }, [isAttested, agentCategory]);
+  }, [deviceData, isAttested, agentCategory]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -622,8 +624,8 @@ function DeviceAuthFlow() {
               )}
               <p className="rounded-lg bg-white/50 p-3 text-emerald-800">
                 Because attestation passed, this agent is confirmed as a{' '}
-                <strong>CIRIS framework agent</strong>. The CIRIS Agent identity
-                type has been automatically selected.
+                <strong>CIRIS framework agent</strong>. You may register it as a
+                CIRIS Agent or as a Non-CIRIS Agent.
               </p>
             </CardContent>
           </Card>
@@ -633,78 +635,35 @@ function DeviceAuthFlow() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">
-              {isAttested ? 'Agent Type (Verified)' : 'Register Your Agent'}
+              {isAttested
+                ? 'Register Your Agent'
+                : 'Non-CIRIS Agent Registration'}
             </CardTitle>
             <CardDescription>
               {isAttested
-                ? 'Attestation confirmed this is a CIRIS framework agent.'
-                : 'Is this a CIRIS framework agent or a third-party agent using the CIRIS identity system?'}
+                ? 'Attestation verified. Choose how to register this agent.'
+                : 'No CIRISVerify attestation was provided. This agent will be registered as a third-party (Non-CIRIS) agent.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className={`grid gap-3 ${isAttested ? '' : 'sm:grid-cols-2'}`}>
-              <button
-                data-testid="btn-agent-ciris"
-                onClick={() => {
-                  setAgentCategory('ciris');
-                  setSelectedTemplate(null);
-                }}
-                className={`rounded-lg border p-4 text-left transition-all ${
-                  agentCategory === 'ciris'
-                    ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="h-5 w-5 text-emerald-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                    />
-                  </svg>
-                  <span className="font-semibold text-gray-900">
-                    CIRIS Agent
-                  </span>
-                  {isAttested && (
-                    <Badge className="bg-emerald-100 text-emerald-700">
-                      Verified
-                    </Badge>
-                  )}
-                </div>
-                <p className="mt-2 text-sm text-gray-600">
-                  Built on the CIRIS framework with native accord compliance,
-                  stewardship tiers, and WBD routing.
-                </p>
-                <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-lg font-bold text-gray-900">$1.50</span>
-                  <span className="text-xs text-gray-500">per identity</span>
-                </div>
-              </button>
-
-              {/* Non-CIRIS option: only shown when attestation did NOT pass */}
-              {!isAttested && (
+            <div className={`grid gap-3 ${isAttested ? 'sm:grid-cols-2' : ''}`}>
+              {/* CIRIS Agent option: only shown when attestation passed */}
+              {isAttested && (
                 <button
-                  data-testid="btn-agent-nonciris"
+                  data-testid="btn-agent-ciris"
                   onClick={() => {
-                    setAgentCategory('non_ciris');
+                    setAgentCategory('ciris');
                     setSelectedTemplate(null);
                   }}
                   className={`rounded-lg border p-4 text-left transition-all ${
-                    agentCategory === 'non_ciris'
+                    agentCategory === 'ciris'
                       ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <svg
-                      className="h-5 w-5 text-gray-500"
+                      className="h-5 w-5 text-emerald-600"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -713,16 +672,19 @@ function DeviceAuthFlow() {
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
                       />
                     </svg>
                     <span className="font-semibold text-gray-900">
-                      Non-CIRIS Agent
+                      CIRIS Agent
                     </span>
+                    <Badge className="bg-emerald-100 text-emerald-700">
+                      Verified
+                    </Badge>
                   </div>
                   <p className="mt-2 text-sm text-gray-600">
-                    Third-party agent using the CIRIS identity system for
-                    verification and registry listing.
+                    Built on the CIRIS framework with native accord compliance,
+                    stewardship tiers, and WBD routing.
                   </p>
                   <div className="mt-3 flex items-baseline gap-1">
                     <span className="text-lg font-bold text-gray-900">
@@ -732,6 +694,46 @@ function DeviceAuthFlow() {
                   </div>
                 </button>
               )}
+
+              <button
+                data-testid="btn-agent-nonciris"
+                onClick={() => {
+                  setAgentCategory('non_ciris');
+                  setSelectedTemplate(null);
+                }}
+                className={`rounded-lg border p-4 text-left transition-all ${
+                  agentCategory === 'non_ciris'
+                    ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="h-5 w-5 text-gray-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                    />
+                  </svg>
+                  <span className="font-semibold text-gray-900">
+                    Non-CIRIS Agent
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-gray-600">
+                  Third-party agent using the CIRIS identity system for
+                  verification and registry listing.
+                </p>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-lg font-bold text-gray-900">$1.50</span>
+                  <span className="text-xs text-gray-500">per identity</span>
+                </div>
+              </button>
             </div>
             <p className="mt-3 text-xs text-gray-400">
               $0.50 issuance fee (non-refundable) + $1.00 identity bond
