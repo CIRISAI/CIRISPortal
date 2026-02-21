@@ -631,7 +631,7 @@ function DeviceAuthFlow() {
                 Because attestation passed, this agent is confirmed as a{' '}
                 <strong>CIRIS framework agent</strong>. Select{' '}
                 <strong>CIRIS Agent</strong> below to receive full accord
-                compliance benefits including stewardship tiers and WBD routing.
+                compliance benefits including stewardship tiers.
               </p>
             </CardContent>
           </Card>
@@ -690,8 +690,10 @@ function DeviceAuthFlow() {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-gray-600">
-                    Built on the CIRIS framework with native accord compliance,
-                    stewardship tiers, and WBD routing.
+                    Built on the CIRIS framework with native accord compliance
+                    and stewardship tiers. Requires your own CIRISNode
+                    deployment. Managed deferral routing available as a Pro+
+                    add-on.
                   </p>
                   <div className="mt-3 flex items-baseline gap-1">
                     <span className="text-lg font-bold text-gray-900">
