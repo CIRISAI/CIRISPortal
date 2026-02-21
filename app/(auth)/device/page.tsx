@@ -526,38 +526,32 @@ function DeviceAuthFlow() {
               <p className="font-medium">What is the identity key used for?</p>
               <ul className="mt-2 list-inside list-disc space-y-1 text-amber-800">
                 <li>
-                  <strong>Audit trail signing</strong> &mdash; Every agent
-                  decision is cryptographically signed, creating an externally
-                  verifiable record
+                  <strong>Identity</strong> &mdash; A hardware-bound Ed25519
+                  signing key that cannot be transferred or forged, serving as
+                  your agent&apos;s foundational identity
                 </li>
                 <li>
-                  <strong>Tamper detection</strong> &mdash; Validates the
-                  installation has not been modified, enabling third-party
-                  verification
+                  <strong>Integrity</strong> &mdash; Build-time SHA-256 hashing
+                  with runtime validation ensures the installation has not been
+                  modified
                 </li>
                 <li>
-                  <strong>Identity validation</strong> &mdash; Supports testing
-                  agent identity &ldquo;in the wild&rdquo; for the{' '}
-                  <a
-                    href="https://ciris.ai/coherence-ratchet"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-amber-600"
-                  >
-                    Coherence Ratchet
-                  </a>{' '}
-                  and{' '}
-                  <a
-                    href="https://ciris.ai/ciris-scoring"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-amber-600"
-                  >
-                    CIRIS Scoring
-                  </a>{' '}
-                  research
+                  <strong>Accountability</strong> &mdash; Establishes the chain
+                  from agent to responsible licensed human, authorized
+                  capabilities, and required disclosures
                 </li>
               </ul>
+              <p className="mt-2 text-xs text-amber-700">
+                Learn more at{' '}
+                <a
+                  href="https://ciris.ai/trust"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-amber-600"
+                >
+                  ciris.ai/trust
+                </a>
+              </p>
             </div>
 
             <p className="rounded-lg bg-white/50 p-3 text-amber-800">
@@ -630,8 +624,18 @@ function DeviceAuthFlow() {
               <p className="rounded-lg bg-white/50 p-3 text-emerald-800">
                 Because attestation passed, this agent is confirmed as a{' '}
                 <strong>CIRIS framework agent</strong>. Select{' '}
-                <strong>CIRIS Agent</strong> below to receive full accord
-                compliance benefits including stewardship tiers.
+                <strong>CIRIS Agent</strong> below to receive full identity,
+                integrity, and accountability benefits &mdash; including
+                multi-source trust validation and five-tier trust scoring. See{' '}
+                <a
+                  href="https://ciris.ai/trust"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-emerald-600"
+                >
+                  ciris.ai/trust
+                </a>{' '}
+                for details.
               </p>
             </CardContent>
           </Card>
@@ -690,10 +694,11 @@ function DeviceAuthFlow() {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-gray-600">
-                    Built on the CIRIS framework with native accord compliance
-                    and stewardship tiers. Requires your own CIRISNode
-                    deployment. Managed deferral routing available as a Pro+
-                    add-on.
+                    Hardware-bound identity, verified software integrity, and
+                    full accountability chain. Includes multi-source trust
+                    validation and five-tier trust scoring. Requires your own
+                    CIRISNode deployment. Managed deferral routing available as
+                    a Pro+ add-on.
                   </p>
                   <div className="mt-3 flex items-baseline gap-1">
                     <span className="text-lg font-bold text-gray-900">
@@ -757,8 +762,8 @@ function DeviceAuthFlow() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-gray-600">
-                        Register as a third-party agent using the CIRIS identity
-                        system for verification and registry listing only.
+                        Identity and registry listing only. No integrity
+                        verification, trust scoring, or accountability chain.
                       </p>
                       <div className="mt-3 flex items-baseline gap-1">
                         <span className="text-lg font-bold text-gray-900">
@@ -805,8 +810,10 @@ function DeviceAuthFlow() {
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-gray-600">
-                  Third-party agent using the CIRIS identity system for
-                  verification and registry listing.
+                  Third-party agent registered in the CIRIS identity system.
+                  Provides identity and registry listing only &mdash; no
+                  integrity verification, trust scoring, or accountability
+                  chain.
                 </p>
                 <div className="mt-3 flex items-baseline gap-1">
                   <span className="text-lg font-bold text-gray-900">$1.50</span>
