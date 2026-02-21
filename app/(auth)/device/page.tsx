@@ -69,6 +69,7 @@ function DeviceAuthFlow() {
   const [selectedAdapters, setSelectedAdapters] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [showOtherOptions, setShowOtherOptions] = useState(false);
 
   // Fetch device record once authenticated
   const fetchDeviceData = useCallback(async () => {
@@ -132,9 +133,13 @@ function DeviceAuthFlow() {
   // Attestation status determines available agent categories
   const isAttested = deviceData?.attestation_verified === true;
 
-  // Non-attested agents can only be Non-CIRIS — auto-select
+  // Auto-select based on attestation:
+  // Attested → default to CIRIS, Non-attested → force Non-CIRIS
   useEffect(() => {
-    if (deviceData && !isAttested && agentCategory !== 'non_ciris') {
+    if (!deviceData) return;
+    if (isAttested && agentCategory === null) {
+      setAgentCategory('ciris');
+    } else if (!isAttested && agentCategory !== 'non_ciris') {
       setAgentCategory('non_ciris');
       setSelectedTemplate(null);
     }
@@ -624,8 +629,9 @@ function DeviceAuthFlow() {
               )}
               <p className="rounded-lg bg-white/50 p-3 text-emerald-800">
                 Because attestation passed, this agent is confirmed as a{' '}
-                <strong>CIRIS framework agent</strong>. You may register it as a
-                CIRIS Agent or as a Non-CIRIS Agent.
+                <strong>CIRIS framework agent</strong>. Select{' '}
+                <strong>CIRIS Agent</strong> below to receive full accord
+                compliance benefits including stewardship tiers and WBD routing.
               </p>
             </CardContent>
           </Card>
@@ -636,26 +642,27 @@ function DeviceAuthFlow() {
           <CardHeader>
             <CardTitle className="text-lg">
               {isAttested
-                ? 'Register Your Agent'
+                ? 'Register Your CIRIS Agent'
                 : 'Non-CIRIS Agent Registration'}
             </CardTitle>
             <CardDescription>
               {isAttested
-                ? 'Attestation verified. Choose how to register this agent.'
+                ? 'Attestation verified. Your agent will be registered as a CIRIS framework agent.'
                 : 'No CIRISVerify attestation was provided. This agent will be registered as a third-party (Non-CIRIS) agent.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className={`grid gap-3 ${isAttested ? 'sm:grid-cols-2' : ''}`}>
-              {/* CIRIS Agent option: only shown when attestation passed */}
-              {isAttested && (
+            {isAttested ? (
+              <>
+                {/* Prominent CIRIS Agent selection (recommended) */}
                 <button
                   data-testid="btn-agent-ciris"
                   onClick={() => {
                     setAgentCategory('ciris');
                     setSelectedTemplate(null);
+                    setShowOtherOptions(false);
                   }}
-                  className={`rounded-lg border p-4 text-left transition-all ${
+                  className={`w-full rounded-lg border p-4 text-left transition-all ${
                     agentCategory === 'ciris'
                       ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -679,7 +686,7 @@ function DeviceAuthFlow() {
                       CIRIS Agent
                     </span>
                     <Badge className="bg-emerald-100 text-emerald-700">
-                      Verified
+                      Recommended
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-gray-600">
@@ -693,15 +700,85 @@ function DeviceAuthFlow() {
                     <span className="text-xs text-gray-500">per identity</span>
                   </div>
                 </button>
-              )}
 
+                {/* Collapsible "Other options" for Non-CIRIS */}
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowOtherOptions(!showOtherOptions)}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    <svg
+                      className={`h-3 w-3 transition-transform ${showOtherOptions ? 'rotate-90' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                    Other options
+                  </button>
+
+                  {showOtherOptions && (
+                    <button
+                      data-testid="btn-agent-nonciris"
+                      onClick={() => {
+                        setAgentCategory('non_ciris');
+                        setSelectedTemplate(null);
+                      }}
+                      className={`mt-2 w-full rounded-lg border p-4 text-left transition-all ${
+                        agentCategory === 'non_ciris'
+                          ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg
+                          className="h-5 w-5 text-gray-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                          />
+                        </svg>
+                        <span className="font-semibold text-gray-900">
+                          Non-CIRIS Agent
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-600">
+                        Register as a third-party agent using the CIRIS identity
+                        system for verification and registry listing only.
+                      </p>
+                      <div className="mt-3 flex items-baseline gap-1">
+                        <span className="text-lg font-bold text-gray-900">
+                          $1.50
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          per identity
+                        </span>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Non-attested: only Non-CIRIS option */
               <button
                 data-testid="btn-agent-nonciris"
                 onClick={() => {
                   setAgentCategory('non_ciris');
                   setSelectedTemplate(null);
                 }}
-                className={`rounded-lg border p-4 text-left transition-all ${
+                className={`w-full rounded-lg border p-4 text-left transition-all ${
                   agentCategory === 'non_ciris'
                     ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -734,7 +811,7 @@ function DeviceAuthFlow() {
                   <span className="text-xs text-gray-500">per identity</span>
                 </div>
               </button>
-            </div>
+            )}
             <p className="mt-3 text-xs text-gray-400">
               $0.50 issuance fee (non-refundable) + $1.00 identity bond
               (forfeited on revocation). Up to 5 concurrent identities.
