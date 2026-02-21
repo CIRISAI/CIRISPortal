@@ -64,6 +64,8 @@ export async function GET(request: Request) {
       status: record.status,
       allowed_templates: allowedTemplates,
       expires_at: record.expiresAt,
+      attestation_verified: record.attestationVerified || false,
+      hardware_type: record.hardwareType || null,
     });
   } catch (error) {
     console.error('[Device Auth] Lookup error:', error);
