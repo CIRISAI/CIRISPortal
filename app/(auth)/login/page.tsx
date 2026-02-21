@@ -108,10 +108,19 @@ function LoginForm() {
         {/* What is CIRIS Portal */}
         <div className="mb-6 rounded-lg bg-gray-50 p-4">
           <p className="mb-3 text-center text-sm text-gray-700">
-            CIRISPortal issues <strong>cryptographic identities</strong> for AI
-            agents, enabling tamper-evident audit trails and participation in
-            the <strong>Coherence Ratchet</strong> &mdash; a mathematical
-            framework where coordinated deception becomes harder over time.
+            CIRISPortal is the{' '}
+            <strong>identity, integrity, and accountability</strong> system for
+            AI agents. Each agent receives a hardware-bound signing key,
+            verified software integrity checks, and a chain of accountability to
+            a responsible human.{' '}
+            <a
+              href="https://ciris.ai/trust"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-emerald-600 underline hover:text-emerald-700"
+            >
+              Learn more
+            </a>
           </p>
           <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             <strong>Note:</strong> CIRIS agent identities are purchased during
@@ -227,32 +236,33 @@ function LoginForm() {
             className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/50 p-4"
           >
             <p className="text-center text-sm font-medium text-emerald-800">
-              CIRIS Community Identity
+              CIRIS Agent Identity (Community Tier)
             </p>
             <ul className="mt-2 space-y-1 text-xs text-emerald-700">
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Cryptographically-signed audit trail
+                Hardware-bound Ed25519 signing key
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Contributes to Coherence Ratchet
+                Build-time integrity verification
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                CIRIS Scoring for integrity measurement
+                Multi-source trust validation &amp; five-tier trust scoring
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Ally template (Community tier)
+                Accountability chain to responsible human
               </li>
             </ul>
             <p className="mt-3 text-center text-xs text-gray-500">
-              $1.50 per identity ($0.50 fee + $1.00 refundable bond)
+              $1.50 per identity ($0.50 issuance + $1.00 bond) &middot; Requires
+              your own CIRISNode
             </p>
             <p className="mt-2 text-center text-xs text-gray-400">
-              Non-CIRIS identities are stored but do not participate in
-              provenance verification
+              Non-CIRIS identities provide registry listing only &mdash; no
+              integrity verification, trust scoring, or accountability chain
             </p>
           </div>
         )}
