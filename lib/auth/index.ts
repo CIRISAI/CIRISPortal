@@ -222,6 +222,29 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
+  // Cookie configuration for Apple Sign-in compatibility.
+  // Apple uses form_post response mode which makes a cross-origin POST,
+  // so cookies must have sameSite: 'none' to be included in the callback.
+  cookies: {
+    state: {
+      name: '__Secure-next-auth.state',
+      options: {
+        httpOnly: true,
+        sameSite: 'none',
+        path: '/',
+        secure: true,
+      },
+    },
+    pkceCodeVerifier: {
+      name: '__Secure-next-auth.pkce.code_verifier',
+      options: {
+        httpOnly: true,
+        sameSite: 'none',
+        path: '/',
+        secure: true,
+      },
+    },
+  },
   callbacks: {
     async jwt({ token, user, account }) {
       // Initial sign in
