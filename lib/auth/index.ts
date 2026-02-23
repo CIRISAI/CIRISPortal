@@ -1,7 +1,9 @@
 import type { NextAuthOptions, User } from 'next-auth';
 import { getServerSession as getNextAuthServerSession } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import AppleProvider from 'next-auth/providers/apple';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import { getAppleClientSecret } from './apple-secret';
 import { getAppEnv, getAuthConfig } from '../env';
 import { TEST_ORG_ID, TEST_SECONDARY_ORG_ID } from '../test-config';
 import {
@@ -88,9 +90,10 @@ const TEST_USERS: Record<
 };
 
 /**
- * Build providers based on environment
+ * Build providers based on environment.
+ * Async because Apple client secret must be generated at runtime.
  */
-function buildProviders() {
+async function buildProviders() {
   // Validate NEXTAUTH_SECRET on first auth request (not at build time)
   validateNextAuthSecret();
 
@@ -105,6 +108,20 @@ function buildProviders() {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     })
   );
+
+  // Add Apple OAuth if configured
+  const appleClientId = process.env.APPLE_CLIENT_ID;
+  if (appleClientId) {
+    const appleSecret = await getAppleClientSecret();
+    if (appleSecret) {
+      providers.push(
+        AppleProvider({
+          clientId: appleClientId,
+          clientSecret: appleSecret,
+        })
+      );
+    }
+  }
 
   // Add test user credentials provider in devtest
   if (authConfig.allowTestUsers) {
@@ -178,8 +195,21 @@ async function safeProvisionUser(
   }
 }
 
+/**
+ * Auth options with all config (secret, session, callbacks, pages).
+ * Providers include Google only. For the full provider list including
+ * Apple, use getAuthOptions() which resolves async.
+ *
+ * Safe to use with getServerSession() — session verification only needs
+ * secret + callbacks, not the full provider list.
+ */
 export const authOptions: NextAuthOptions = {
-  providers: buildProviders(),
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    }),
+  ],
   secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: 'jwt',
@@ -339,6 +369,27 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+// Lazily initialized auth options with full provider list (including Apple)
+let _authOptions: NextAuthOptions | null = null;
+let _authOptionsPromise: Promise<NextAuthOptions> | null = null;
+
+/**
+ * Get NextAuth options with all providers (including Apple).
+ * Async because Apple client secret requires Web Crypto generation.
+ * Used by the NextAuth route handler.
+ */
+export async function getAuthOptions(): Promise<NextAuthOptions> {
+  if (_authOptions) return _authOptions;
+  if (_authOptionsPromise) return _authOptionsPromise;
+
+  _authOptionsPromise = buildProviders().then((providers) => {
+    _authOptions = { ...authOptions, providers };
+    return _authOptions;
+  });
+
+  return _authOptionsPromise;
+}
 
 /**
  * Helper to get the server session in server components
