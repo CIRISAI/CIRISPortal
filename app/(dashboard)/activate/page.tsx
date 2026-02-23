@@ -261,8 +261,8 @@ export default function ActivatePage() {
               Community identities receive no steward-backed verification, no
               SLA, and no liability coverage. You are solely responsible for
               your agent&apos;s behavior. The identity bond is forfeited on
-              revocation. For guaranteed verification and accountability
-              backing, upgrade to the Professional tier.
+              revocation. For steward-backed validation and accountability
+              support, upgrade to the Professional tier.
             </p>
           </div>
 

@@ -532,7 +532,7 @@ function DeviceAuthFlow() {
                 </li>
                 <li>
                   <strong>Integrity</strong> &mdash; Build-time SHA-256 hashing
-                  with runtime validation ensures the installation has not been
+                  with runtime checks detects whether the installation has been
                   modified
                 </li>
                 <li>
@@ -580,13 +580,13 @@ function DeviceAuthFlow() {
                     d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
                   />
                 </svg>
-                CIRISVerify Attestation Passed
+                CIRISVerify &mdash; Full Attestation State
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-emerald-900">
               <p>
                 This agent submitted a cryptographic attestation that was
-                verified by the portal. Here is what was checked:
+                validated by the portal. Here is what was checked:
               </p>
               <ul className="list-inside list-disc space-y-1 text-emerald-800">
                 <li>
@@ -596,12 +596,12 @@ function DeviceAuthFlow() {
                 </li>
                 <li>
                   <strong>Classical signature (Ed25519)</strong> &mdash;
-                  Cryptographic signature verified against the agent&apos;s
+                  Cryptographic signature validated against the agent&apos;s
                   public key
                 </li>
                 <li>
-                  <strong>Agent integrity</strong> &mdash; CIRISVerify confirmed
-                  the agent binary has not been tampered with
+                  <strong>Agent integrity</strong> &mdash; CIRISVerify detected
+                  no tampering in the agent binary
                 </li>
                 {deviceData?.hardware_type &&
                   deviceData.hardware_type !== 'SOFTWARE_ONLY' && (
@@ -622,11 +622,11 @@ function DeviceAuthFlow() {
                 </p>
               )}
               <p className="rounded-lg bg-white/50 p-3 text-emerald-800">
-                Because attestation passed, this agent is confirmed as a{' '}
+                Attestation checks passed. This agent is recognized as a{' '}
                 <strong>CIRIS framework agent</strong>. Select{' '}
-                <strong>CIRIS Agent</strong> below to receive full identity,
-                integrity, and accountability benefits &mdash; including
-                multi-source trust validation and five-tier trust scoring. See{' '}
+                <strong>CIRIS Agent</strong> below for identity, integrity, and
+                accountability benefits &mdash; including multi-source trust
+                validation and five-tier attestation scoring. See{' '}
                 <a
                   href="https://ciris.ai/trust"
                   target="_blank"
@@ -636,6 +636,10 @@ function DeviceAuthFlow() {
                   ciris.ai/trust
                 </a>{' '}
                 for details.
+              </p>
+              <p className="text-xs text-emerald-700">
+                CIRISVerify provides cryptographic attestation under defined
+                threat models and does not guarantee absolute security.
               </p>
             </CardContent>
           </Card>
@@ -651,7 +655,7 @@ function DeviceAuthFlow() {
             </CardTitle>
             <CardDescription>
               {isAttested
-                ? 'Attestation verified. Your agent will be registered as a CIRIS framework agent.'
+                ? 'Attestation checks passed. Your agent will be registered as a CIRIS framework agent.'
                 : 'No CIRISVerify attestation was provided. This agent will be registered as a third-party (Non-CIRIS) agent.'}
             </CardDescription>
           </CardHeader>
@@ -694,9 +698,9 @@ function DeviceAuthFlow() {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-gray-600">
-                    Hardware-bound identity, verified software integrity, and
-                    full accountability chain. Includes multi-source trust
-                    validation and five-tier trust scoring. Requires your own
+                    Hardware-bound identity, software integrity checks, and
+                    accountability chain. Includes multi-source trust validation
+                    and five-tier attestation scoring. Requires your own
                     CIRISNode deployment. Managed deferral routing available as
                     a Pro+ add-on.
                   </p>
@@ -762,8 +766,8 @@ function DeviceAuthFlow() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-gray-600">
-                        Identity and registry listing only. No integrity
-                        verification, trust scoring, or accountability chain.
+                        Identity and registry listing only. No integrity checks,
+                        attestation scoring, or accountability chain.
                       </p>
                       <div className="mt-3 flex items-baseline gap-1">
                         <span className="text-lg font-bold text-gray-900">
@@ -812,7 +816,7 @@ function DeviceAuthFlow() {
                 <p className="mt-2 text-sm text-gray-600">
                   Third-party agent registered in the CIRIS identity system.
                   Provides identity and registry listing only &mdash; no
-                  integrity verification, trust scoring, or accountability
+                  integrity checks, attestation scoring, or accountability
                   chain.
                 </p>
                 <div className="mt-3 flex items-baseline gap-1">

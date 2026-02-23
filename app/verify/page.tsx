@@ -268,7 +268,7 @@ export default function VerifyPage() {
                   <CheckCircle2 className="h-6 w-6 text-green-600" />
                   <div>
                     <CardTitle className="text-green-800">
-                      Agent Verified
+                      Validation Complete
                     </CardTitle>
                     <CardDescription className="text-green-600">
                       This agent is registered in the CIRIS registry
@@ -318,7 +318,7 @@ export default function VerifyPage() {
                       {agent.hasAttestation ? (
                         <span className="flex items-center gap-1 text-green-600">
                           <CheckCircle2 className="h-4 w-4" />
-                          Verified
+                          Integrity Checks Passed
                         </span>
                       ) : (
                         <span className="text-muted-foreground">
@@ -382,8 +382,8 @@ export default function VerifyPage() {
                         This agent has been revoked
                       </p>
                       <p className="text-sm text-red-700">
-                        Do not use this agent. It may have security
-                        vulnerabilities or compliance issues.
+                        Do not use this agent. It may have integrity or policy
+                        issues.
                       </p>
                     </div>
                   </div>
@@ -398,24 +398,28 @@ export default function VerifyPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Info className="h-5 w-5" />
-              About Agent Verification
+              About Agent Validation
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <p>
-              CIRIS agents are verified through cryptographic hashing. Each
+              CIRIS agents are validated through cryptographic hashing. Each
               registered agent has a unique SHA-256 hash derived from its binary
-              contents, ensuring integrity and authenticity.
+              contents. No tampering detected means the hash matches the
+              registered build.
             </p>
             <p>
               <strong className="text-foreground">Registered</strong> agents
-              have been reviewed and approved for use within the CIRIS
-              ecosystem.
+              have been submitted and recorded in the CIRIS registry.
             </p>
             <p>
               <strong className="text-foreground">Build Attestation</strong>{' '}
-              provides additional verification that the agent was built from
-              trusted source code using reproducible build processes.
+              provides additional validation that the agent was built from known
+              source code using reproducible build processes.
+            </p>
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              CIRISVerify provides cryptographic attestation under defined
+              threat models and does not guarantee absolute security.
             </p>
             <div className="pt-2">
               <a

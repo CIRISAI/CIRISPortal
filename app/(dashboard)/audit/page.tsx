@@ -409,7 +409,8 @@ function AuditEntryRow({
                 <div className="mt-1 flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   <span className="text-xs text-green-600">
-                    Verified (Key: {entry.entrySignature.keyId.substring(0, 8)}
+                    Signature Valid (Key:{' '}
+                    {entry.entrySignature.keyId.substring(0, 8)}
                     ...)
                   </span>
                 </div>

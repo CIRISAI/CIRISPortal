@@ -111,8 +111,8 @@ function LoginForm() {
             CIRISPortal is the{' '}
             <strong>identity, integrity, and accountability</strong> system for
             AI agents. Each agent receives a hardware-bound signing key,
-            verified software integrity checks, and a chain of accountability to
-            a responsible human.{' '}
+            software integrity checks, and a chain of accountability to a
+            responsible human.{' '}
             <a
               href="https://ciris.ai/trust"
               target="_blank"
@@ -258,11 +258,12 @@ function LoginForm() {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Build-time integrity verification
+                Build-time integrity checks
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
-                Multi-source trust validation &amp; five-tier trust scoring
+                Multi-source trust validation &amp; five-tier attestation
+                scoring
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">&#10003;</span>
@@ -275,7 +276,7 @@ function LoginForm() {
             </p>
             <p className="mt-2 text-center text-xs text-gray-400">
               Non-CIRIS identities provide registry listing only &mdash; no
-              integrity verification, trust scoring, or accountability chain
+              integrity checks, attestation scoring, or accountability chain
             </p>
           </div>
         )}
