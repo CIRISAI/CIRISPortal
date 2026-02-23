@@ -85,23 +85,31 @@ function emailToOrgSlug(email: string): string {
  * Check if a user exists in the registry.
  *
  * Uses getUserByEmail to directly look up the user (each user has their own org).
- * Returns the actual orgId (UUID) if found, null otherwise.
+ * Returns the user info if found, null otherwise.
  * All users are allowed to self-signup; this check is for returning users.
  */
-export async function checkUserExists(
-  email: string
-): Promise<{ exists: boolean; orgId?: string; orgName?: string }> {
+export async function checkUserExists(email: string): Promise<{
+  exists: boolean;
+  userId?: string;
+  orgId?: string;
+  orgName?: string;
+  role?: UserRole;
+}> {
   try {
     const userResponse = await getUserByEmail({ email });
     if (userResponse.user && userResponse.user.memberships?.length > 0) {
-      const membership = userResponse.user.memberships[0];
+      const user = userResponse.user;
+      const membership = user.memberships[0];
+      const role = orgRoleToUserRole(membership.role || 'ORG_VIEWER', email);
       console.log(
-        `[Auth] Found user ${email} in org ${membership.orgId} (${membership.orgName})`
+        `[Auth] Found user ${email} (${user.userId}) in org ${membership.orgId} (${membership.orgName})`
       );
       return {
         exists: true,
+        userId: user.userId,
         orgId: membership.orgId,
         orgName: membership.orgName,
+        role,
       };
     }
   } catch (error) {
@@ -485,32 +493,36 @@ export async function provisionUser(
   // Check if user already exists in any org (returning user)
   const existingUser = await checkUserExists(email);
 
+  let userId: string;
   let orgId: string;
   let orgName: string;
+  let role: UserRole;
+  let isNewUser = false;
   let isNewOrg = false;
 
-  if (existingUser.exists && existingUser.orgId) {
-    // Returning user — use their existing per-user org
+  if (existingUser.exists && existingUser.userId && existingUser.orgId) {
+    // Returning user — use their existing info directly
+    userId = existingUser.userId;
     orgId = existingUser.orgId;
     orgName = existingUser.orgName || orgId;
-    console.log(`[Provisioning] Using existing org ${orgId} for ${email}`);
+    role = existingUser.role || determineNewUserRole(email);
+    console.log(
+      `[Provisioning] Returning user ${email} (${userId}) in org ${orgId}`
+    );
   } else {
     // New user — create per-user org (type determined by domain)
     const orgResult = await getOrCreateUserOrganization(email, name);
     orgId = orgResult.orgId;
     orgName = orgResult.orgName;
     isNewOrg = orgResult.isNew;
+
+    // Create user in their org
+    const defaultRole = determineNewUserRole(email);
+    const userResult = await getOrCreateUser(orgId, email, name, defaultRole);
+    userId = userResult.userId;
+    role = userResult.role;
+    isNewUser = userResult.isNew;
   }
-
-  // Determine role for this user
-  const defaultRole = determineNewUserRole(email);
-
-  // Get or create user in their org
-  const {
-    userId,
-    role,
-    isNew: isNewUser,
-  } = await getOrCreateUser(orgId, email, name, defaultRole);
 
   // Only the bootstrap system admin gets a SYSTEM_ADMIN record
   if (email.toLowerCase() === BOOTSTRAP_SYSTEM_ADMIN) {
