@@ -110,6 +110,9 @@ async function buildProviders() {
   );
 
   // Add Apple OAuth if configured
+  // Note: Apple uses form_post response mode which breaks PKCE cookie handling.
+  // We use checks: ["state"] instead of the default ["pkce"] to avoid the
+  // "PKCE code_verifier cookie was missing" error.
   const appleClientId = process.env.APPLE_CLIENT_ID;
   if (appleClientId) {
     const appleSecret = await getAppleClientSecret();
@@ -118,6 +121,7 @@ async function buildProviders() {
         AppleProvider({
           clientId: appleClientId,
           clientSecret: appleSecret,
+          checks: ['state'],
         })
       );
     }
