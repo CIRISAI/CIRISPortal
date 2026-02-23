@@ -18,7 +18,7 @@ import {
   getOrgUserByEmail,
   createOrgUser,
   updateOrgUser,
-  listOrganizations,
+  getUserByEmail,
   createSystemUser,
 } from '../grpc/client';
 
@@ -84,37 +84,32 @@ function emailToOrgSlug(email: string): string {
 /**
  * Check if a user exists in the registry.
  *
- * Searches all orgs to find which one contains this user.
+ * Uses getUserByEmail to directly look up the user (each user has their own org).
  * Returns the actual orgId (UUID) if found, null otherwise.
  * All users are allowed to self-signup; this check is for returning users.
  */
 export async function checkUserExists(
   email: string
 ): Promise<{ exists: boolean; orgId?: string; orgName?: string }> {
-  // Search all orgs for this user
   try {
-    const orgsResponse = await listOrganizations({ pageSize: 200 });
-    const orgs = orgsResponse.organizations || [];
-
-    for (const org of orgs) {
-      if (!org.orgId) continue;
-      try {
-        const userResponse = await getOrgUserByEmail({
-          orgId: org.orgId,
-          email,
-        });
-        if (userResponse.user) {
-          console.log(
-            `[Auth] Found user ${email} in org ${org.orgId} (${org.name})`
-          );
-          return { exists: true, orgId: org.orgId, orgName: org.name };
-        }
-      } catch {
-        // User not in this org, continue
-      }
+    const userResponse = await getUserByEmail({ email });
+    if (userResponse.user && userResponse.user.memberships?.length > 0) {
+      const membership = userResponse.user.memberships[0];
+      console.log(
+        `[Auth] Found user ${email} in org ${membership.orgId} (${membership.orgName})`
+      );
+      return {
+        exists: true,
+        orgId: membership.orgId,
+        orgName: membership.orgName,
+      };
     }
   } catch (error) {
-    console.error(`[Auth] Error searching orgs for user ${email}:`, error);
+    const err = error as { code?: number; message?: string };
+    // NOT_FOUND is expected for new users
+    if (err.code !== 5 && !err.message?.includes('not found')) {
+      console.error(`[Auth] Error looking up user ${email}:`, error);
+    }
   }
 
   console.log(`[Auth] User ${email} not found in any organization`);
