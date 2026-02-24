@@ -61,7 +61,7 @@ export interface DeviceAuthRecord {
   expiresAt: number; // createdAt + TTL
 }
 
-const DEVICE_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const DEVICE_CODE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // Cleanup every minute
 
 let dbInitialized = false;
