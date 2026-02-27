@@ -20,6 +20,10 @@ import {
   updateOrgUser,
   getUserByEmail,
   createSystemUser,
+  lookupUserByOAuth,
+  linkUserOAuth,
+  lookupSystemUserByOAuth,
+  linkSystemUserOAuth,
 } from '../grpc/client';
 
 /**
@@ -470,11 +474,15 @@ function determineNewUserRole(email: string): UserRole {
  * Main entry point called from NextAuth callbacks.
  * Each user gets their own unique org (1:1 user:org).
  * Returns actual org UUIDs from the registry, never slugs.
+ *
+ * Now supports multi-provider OAuth - if user exists with a different
+ * provider, the new OAuth identity is linked to the existing account.
  */
 export async function provisionUser(
   email: string,
   name: string,
-  oauthProvider: string = 'google'
+  oauthProvider: string = 'google',
+  oauthSubject?: string
 ): Promise<ProvisionedUser> {
   const domain = email.split('@')[1]?.toLowerCase();
 
@@ -490,15 +498,73 @@ export async function provisionUser(
     `[Provisioning] Starting for ${email} (domain: ${domain}, provider: ${oauthProvider})`
   );
 
-  // Check if user already exists in any org (returning user)
-  const existingUser = await checkUserExists(email);
-
   let userId: string;
   let orgId: string;
   let orgName: string;
   let role: UserRole;
   let isNewUser = false;
   let isNewOrg = false;
+
+  // Try OAuth-aware lookup first (if we have the OAuth subject)
+  let existingUser: {
+    exists: boolean;
+    userId?: string;
+    orgId?: string;
+    orgName?: string;
+    role?: UserRole;
+  } | null = null;
+  let shouldLinkOAuth = false;
+
+  if (oauthSubject) {
+    try {
+      const oauthLookup = await lookupUserByOAuth({
+        oauthProvider,
+        oauthSubject,
+        email,
+      });
+
+      if (oauthLookup.found && oauthLookup.userId) {
+        // User found - check if we need to link the OAuth identity
+        shouldLinkOAuth = oauthLookup.shouldLinkOauth || false;
+
+        // Get full user info
+        const fullUser = await checkUserExists(email);
+        existingUser = fullUser;
+
+        if (shouldLinkOAuth) {
+          console.log(
+            `[Provisioning] Linking ${oauthProvider} identity to existing user ${email}`
+          );
+          try {
+            await linkUserOAuth({
+              userId: oauthLookup.userId,
+              oauthProvider,
+              oauthSubject,
+              email,
+            });
+            console.log(`[Provisioning] OAuth identity linked successfully`);
+          } catch (linkErr) {
+            // Non-fatal - user can still log in
+            console.warn(
+              `[Provisioning] Failed to link OAuth identity:`,
+              linkErr
+            );
+          }
+        }
+      }
+    } catch (oauthErr) {
+      // Fall back to email-only lookup
+      console.warn(
+        `[Provisioning] OAuth lookup failed, falling back to email:`,
+        oauthErr
+      );
+    }
+  }
+
+  // Fall back to email-only lookup if OAuth lookup didn't find a user
+  if (!existingUser) {
+    existingUser = await checkUserExists(email);
+  }
 
   if (existingUser.exists && existingUser.userId && existingUser.orgId) {
     // Returning user — use their existing info directly
@@ -522,17 +588,90 @@ export async function provisionUser(
     userId = userResult.userId;
     role = userResult.role;
     isNewUser = userResult.isNew;
+
+    // Link OAuth identity to the new user
+    if (oauthSubject && isNewUser) {
+      try {
+        await linkUserOAuth({
+          userId,
+          oauthProvider,
+          oauthSubject,
+          email,
+        });
+        console.log(
+          `[Provisioning] Linked ${oauthProvider} identity to new user ${email}`
+        );
+      } catch (linkErr) {
+        // Non-fatal - user was still created
+        console.warn(
+          `[Provisioning] Failed to link OAuth identity to new user:`,
+          linkErr
+        );
+      }
+    }
   }
 
   // Only the bootstrap system admin gets a SYSTEM_ADMIN record
   if (email.toLowerCase() === BOOTSTRAP_SYSTEM_ADMIN) {
     try {
-      await createSystemUser({
-        email,
-        name,
-        role: 'SYSTEM_ADMIN',
-      });
-      console.log(`[Provisioning] Created/verified system admin for ${email}`);
+      // Check if system user exists via OAuth or email
+      let systemUserExists = false;
+      let systemUserId: string | undefined;
+
+      if (oauthSubject) {
+        try {
+          const sysLookup = await lookupSystemUserByOAuth({
+            oauthProvider,
+            oauthSubject,
+            email,
+          });
+          if (sysLookup.found) {
+            systemUserExists = true;
+            systemUserId = sysLookup.userId;
+            // Link OAuth identity if needed
+            if (sysLookup.shouldLinkOauth && systemUserId) {
+              await linkSystemUserOAuth({
+                userId: systemUserId,
+                oauthProvider,
+                oauthSubject,
+                email,
+              });
+              console.log(
+                `[Provisioning] Linked ${oauthProvider} to system admin ${email}`
+              );
+            }
+          }
+        } catch {
+          // Fall back to create
+        }
+      }
+
+      if (!systemUserExists) {
+        const result = await createSystemUser({
+          email,
+          name,
+          role: 'SYSTEM_ADMIN',
+        });
+        systemUserId = result.userId;
+        console.log(`[Provisioning] Created system admin for ${email}`);
+
+        // Link OAuth identity to new system user
+        if (oauthSubject && systemUserId) {
+          try {
+            await linkSystemUserOAuth({
+              userId: systemUserId,
+              oauthProvider,
+              oauthSubject,
+              email,
+            });
+          } catch (linkErr) {
+            console.warn(
+              `[Provisioning] Failed to link OAuth to system user:`,
+              linkErr
+            );
+          }
+        }
+      }
     } catch (error) {
       const err = error as { message?: string };
       if (

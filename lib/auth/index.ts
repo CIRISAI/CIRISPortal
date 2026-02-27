@@ -182,10 +182,11 @@ async function buildProviders() {
 async function safeProvisionUser(
   email: string,
   name: string,
-  provider: string
+  provider: string,
+  oauthSubject?: string
 ): Promise<ProvisionedUser> {
   try {
-    return await provisionUser(email, name, provider);
+    return await provisionUser(email, name, provider, oauthSubject);
   } catch (error) {
     if (error instanceof ProvisioningError) {
       console.error(
@@ -284,7 +285,8 @@ export const authOptions: NextAuthOptions = {
             const provisionedUser = await safeProvisionUser(
               user.email,
               user.name || user.email.split('@')[0],
-              account.provider
+              account.provider,
+              account.providerAccountId // OAuth subject for multi-provider support
             );
 
             token.userId = provisionedUser.userId;

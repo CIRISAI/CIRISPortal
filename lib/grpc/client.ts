@@ -1088,3 +1088,148 @@ export async function createAuditEntry(params: {
     metadata: params.metadata,
   });
 }
+
+// ============================================================================
+// OAuth Identity Management (v1.3.0)
+// ============================================================================
+
+/**
+ * OAuth lookup result type
+ */
+export interface OAuthLookupResult {
+  found: boolean;
+  userId?: string;
+  lookupMethod?: 'oauth' | 'email';
+  shouldLinkOauth?: boolean;
+}
+
+/**
+ * Look up a user by OAuth provider and subject, with fallback to email.
+ * Returns lookup_method to indicate how the user was found.
+ */
+export async function lookupUserByOAuth(params: {
+  oauthProvider: string;
+  oauthSubject: string;
+  email: string;
+}): Promise<OAuthLookupResult> {
+  const response = (await promisifyUnaryAuth(
+    getPortalClient(),
+    'lookupUserByOAuth',
+    {
+      context: buildContext(),
+      oauthProvider: params.oauthProvider,
+      oauthSubject: params.oauthSubject,
+      email: params.email,
+    }
+  )) as OAuthLookupResult;
+  return {
+    found: response.found,
+    userId: response.userId,
+    lookupMethod: response.lookupMethod,
+    shouldLinkOauth: response.shouldLinkOauth,
+  };
+}
+
+/**
+ * Link a new OAuth identity to an existing user.
+ */
+export async function linkUserOAuth(params: {
+  userId: string;
+  oauthProvider: string;
+  oauthSubject: string;
+  email?: string;
+}): Promise<{ success: boolean }> {
+  return promisifyUnaryAuth(getPortalClient(), 'linkUserOAuth', {
+    context: buildContext(),
+    userId: params.userId,
+    oauthProvider: params.oauthProvider,
+    oauthSubject: params.oauthSubject,
+    email: params.email,
+  });
+}
+
+/**
+ * List all OAuth identities linked to a user.
+ */
+export async function listUserOAuthIdentities(params: {
+  userId: string;
+}): Promise<{
+  identities: Array<{
+    oauthProvider: string;
+    oauthSubject: string;
+    emailAtLink?: string;
+    createdAt?: string;
+  }>;
+}> {
+  return promisifyUnaryAuth(getPortalClient(), 'listUserOAuthIdentities', {
+    context: buildContext(),
+    userId: params.userId,
+  });
+}
+
+/**
+ * Look up a system user by OAuth provider and subject, with fallback to email.
+ */
+export async function lookupSystemUserByOAuth(params: {
+  oauthProvider: string;
+  oauthSubject: string;
+  email: string;
+}): Promise<OAuthLookupResult> {
+  const response = (await promisifyUnaryAuth(
+    getPortalClient(),
+    'lookupSystemUserByOAuth',
+    {
+      context: buildContext(),
+      oauthProvider: params.oauthProvider,
+      oauthSubject: params.oauthSubject,
+      email: params.email,
+    }
+  )) as OAuthLookupResult;
+  return {
+    found: response.found,
+    userId: response.userId,
+    lookupMethod: response.lookupMethod,
+    shouldLinkOauth: response.shouldLinkOauth,
+  };
+}
+
+/**
+ * Link a new OAuth identity to an existing system user.
+ */
+export async function linkSystemUserOAuth(params: {
+  userId: string;
+  oauthProvider: string;
+  oauthSubject: string;
+  email?: string;
+}): Promise<{ success: boolean }> {
+  return promisifyUnaryAuth(getPortalClient(), 'linkSystemUserOAuth', {
+    context: buildContext(),
+    userId: params.userId,
+    oauthProvider: params.oauthProvider,
+    oauthSubject: params.oauthSubject,
+    email: params.email,
+  });
+}
+
+/**
+ * List all OAuth identities linked to a system user.
+ */
+export async function listSystemUserOAuthIdentities(params: {
+  userId: string;
+}): Promise<{
+  identities: Array<{
+    oauthProvider: string;
+    oauthSubject: string;
+    emailAtLink?: string;
+    createdAt?: string;
+  }>;
+}> {
+  return promisifyUnaryAuth(
+    getPortalClient(),
+    'listSystemUserOAuthIdentities',
+    {
+      context: buildContext(),
+      userId: params.userId,
+    }
+  );
+}
