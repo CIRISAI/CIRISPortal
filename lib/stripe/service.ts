@@ -98,6 +98,32 @@ export async function updateCustomerMetadata(
   return await stripe.customers.update(customerId, { metadata });
 }
 
+// ─── Checkout Session Management ────────────────────────────────────────────
+
+/**
+ * Retrieve an existing checkout session by ID.
+ * Returns null if session doesn't exist or has an error.
+ */
+export async function getCheckoutSession(
+  sessionId: string
+): Promise<Stripe.Checkout.Session | null> {
+  try {
+    const stripe = getStripe();
+    return await stripe.checkout.sessions.retrieve(sessionId);
+  } catch (error) {
+    console.warn(`[Stripe] Failed to retrieve session ${sessionId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Check if a checkout session is still valid for reuse.
+ * A session is reusable if it's still 'open' (not expired, completed, or canceled).
+ */
+export function isSessionReusable(session: Stripe.Checkout.Session): boolean {
+  return session.status === 'open' && !!session.url;
+}
+
 // ─── Identity Activation ────────────────────────────────────────────────────
 
 /**

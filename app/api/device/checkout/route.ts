@@ -9,6 +9,8 @@ import {
   createActivationCheckout,
   getCustomerByEmail,
   createCustomer,
+  getCheckoutSession,
+  isSessionReusable,
 } from '@/lib/stripe/service';
 
 /**
@@ -79,6 +81,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: `Cannot checkout: status is ${record.status}` },
         { status: 409 }
+      );
+    }
+
+    // Check if there's already an active checkout session for this device
+    if (record.stripeSessionId) {
+      const existingSession = await getCheckoutSession(record.stripeSessionId);
+      if (existingSession && isSessionReusable(existingSession)) {
+        console.log(
+          `[Device Checkout] Reusing existing session ${record.stripeSessionId} for device ${record.userCode}`
+        );
+        return NextResponse.json({ url: existingSession.url });
+      }
+      // Session expired or completed - will create a new one
+      console.log(
+        `[Device Checkout] Previous session ${record.stripeSessionId} not reusable (status: ${existingSession?.status || 'not found'}), creating new one`
       );
     }
 
