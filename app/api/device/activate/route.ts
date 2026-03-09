@@ -6,6 +6,7 @@ import {
   base64ToArrayBuffer,
 } from '@/lib/keystore/crypto';
 import { query, queryOne } from '@/lib/db/client';
+import { revokeKey } from '@/lib/grpc/client';
 
 /**
  * POST /api/device/activate
@@ -202,7 +203,27 @@ export async function POST(request: Request) {
           `Current attempt: ${record.userCode}. KEY REUSE IS FORBIDDEN.`
       );
 
-      // TODO: Trigger key revocation in CIRISRegistry
+      // Trigger key revocation in CIRISRegistry
+      // The key that was reused must be revoked to prevent further abuse
+      if (record.orgId && record.provisionedKey?.keyId) {
+        try {
+          await revokeKey({
+            orgId: record.orgId,
+            keyId: record.provisionedKey.keyId,
+            requesterUserId: 'system:key-reuse-detection',
+            reason: `KEY REUSE DETECTED: Key was previously activated for device ${existingActivation.user_code} at ${existingActivation.activated_at}. Attempted reuse by ${record.userCode}.`,
+          });
+          console.log(
+            `[Device Activate] Revoked key ${record.provisionedKey.keyId} due to reuse attempt`
+          );
+        } catch (revokeErr) {
+          console.error(
+            `[Device Activate] Failed to revoke key ${record.provisionedKey.keyId}:`,
+            revokeErr
+          );
+          // Continue to return error even if revocation fails
+        }
+      }
 
       return NextResponse.json(
         {
@@ -253,9 +274,8 @@ export async function POST(request: Request) {
 
     // Update device record to mark key as activated
     await updateRecord(record.deviceCode, {
-      // Add keyActivated field to record
-      // Note: This may require updating the DeviceAuthRecord type
-    } as any);
+      keyActivated: true,
+    });
 
     console.log(
       `[Device Activate] Key activated successfully for ${record.userCode} ` +

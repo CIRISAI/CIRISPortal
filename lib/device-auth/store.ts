@@ -57,6 +57,7 @@ export interface DeviceAuthRecord {
   attestationVerified?: boolean; // Set true after server-side verification
   hardwareType?: string; // e.g. "TPM_2_0", "IOS_SECURE_ENCLAVE", "SOFTWARE_ONLY"
   packageDownloadUrl?: string; // URL to download licensed module package zip
+  keyActivated?: boolean; // Set true after agent proves key possession
   createdAt: number;
   expiresAt: number; // createdAt + TTL
 }
