@@ -334,13 +334,10 @@ function DeviceAuthFlow() {
                 automatically continue setup.
               </p>
             </div>
-            <div className="flex justify-center">
-              <button
-                onClick={() => window.close()}
-                className="rounded-lg bg-emerald-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-emerald-700"
-              >
-                Close This Page
-              </button>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center">
+              <p className="font-medium text-blue-800">
+                Please return to the CIRIS App
+              </p>
             </div>
             {(selectedTemplate || agentCategory) && (
               <div className="space-y-1 border-t pt-4 text-center text-sm text-gray-600">
