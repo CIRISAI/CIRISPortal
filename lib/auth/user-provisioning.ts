@@ -646,25 +646,53 @@ export async function provisionUser(
         }
       }
 
+      // Create system user if OAuth lookup didn't find them
       if (!systemUserExists) {
-        const result = await createSystemUser({
-          email,
-          name,
-          role: 'SYSTEM_ADMIN',
-        });
-        systemUserId = result.userId;
-        console.log(`[Provisioning] Created system admin for ${email}`);
+        try {
+          const result = await createSystemUser({
+            email,
+            name,
+            role: 'SYSTEM_ADMIN',
+          });
+          systemUserId = result.userId;
+          console.log(`[Provisioning] Created system admin for ${email}`);
+        } catch (createErr) {
+          const err = createErr as { message?: string };
+          // Handle duplicate key - user already exists, which is fine
+          if (
+            err.message?.includes('duplicate') ||
+            err.message?.includes('already exists')
+          ) {
+            console.log(
+              `[Provisioning] System user already exists (duplicate key) - continuing`
+            );
+            // User exists but we don't have their ID - that's OK for admin check
+            systemUserExists = true;
+          } else {
+            console.warn(
+              `[Provisioning] Failed to create system user:`,
+              createErr
+            );
+          }
+        }
+      }
 
-        // Link OAuth identity to new system user
-        if (oauthSubject && systemUserId) {
-          try {
-            await linkSystemUserOAuth({
-              userId: systemUserId,
-              oauthProvider,
-              oauthSubject,
-              email,
-            });
-          } catch (linkErr) {
+      // Link OAuth identity to system user (new or existing)
+      if (oauthSubject && systemUserId) {
+        try {
+          await linkSystemUserOAuth({
+            userId: systemUserId,
+            oauthProvider,
+            oauthSubject,
+            email,
+          });
+          console.log(
+            `[Provisioning] Linked ${oauthProvider} to system admin ${email}`
+          );
+        } catch (linkErr) {
+          // Non-fatal - might already be linked
+          const err = linkErr as { message?: string };
+          if (!err.message?.includes('duplicate')) {
             console.warn(
               `[Provisioning] Failed to link OAuth to system user:`,
               linkErr
@@ -673,13 +701,7 @@ export async function provisionUser(
         }
       }
     } catch (error) {
-      const err = error as { message?: string };
-      if (
-        !err.message?.includes('duplicate') &&
-        !err.message?.includes('already exists')
-      ) {
-        console.warn(`[Provisioning] Failed to create system user:`, error);
-      }
+      console.warn(`[Provisioning] System admin provisioning error:`, error);
     }
   }
 
