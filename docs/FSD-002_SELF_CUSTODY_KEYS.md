@@ -1,10 +1,11 @@
 # FSD-002: Self-Custody Key Generation
 
-**Status:** IN PROGRESS (Registry Complete)
+**Status:** COMPLETE (Registry + Portal)
 **Author:** CIRISPortal Team
 **Created:** 2026-03-25
 **Last Updated:** 2026-03-25
 **Registry Commit:** 02a94ad
+**Portal Commit:** c207e24
 
 ---
 
@@ -1002,25 +1003,197 @@ CREATE INDEX idx_activation_expires ON activation_challenges(expires_at);
 - [ ] Unit tests for signature verification
 - [ ] Integration tests for full flow
 
-### Portal (CIRISPortal)
+### Portal (CIRISPortal) ✅ COMPLETE
 
-- [ ] Sync proto file from Registry
-- [ ] Add `getRegistrationChallenge` to gRPC client
-- [ ] Add `registerPublicKey` to gRPC client
-- [ ] Add `activateSelfCustodyKey` to gRPC client
-- [ ] Add `rotateSelfCustodyKey` to gRPC client
-- [ ] Create `/api/device/register-key` endpoint
-- [ ] Create `/api/device/activate-key` endpoint
-- [ ] Update device auth flow to support self-custody path
-- [ ] Update keys page to show custody model badge
-- [ ] Add self-custody disclaimer acceptance UI
+- [x] Sync proto file from Registry
+- [x] Add `getRegistrationChallenge` to gRPC client
+- [x] Add `registerPublicKey` to gRPC client
+- [x] Add `activateSelfCustodyKey` to gRPC client
+- [x] Add `rotateSelfCustodyKey` to gRPC client
+- [x] Create `/api/device/register-key` endpoint
+- [x] Create `/api/device/activate-key` endpoint
+- [x] Update device auth flow to support self-custody path
+- [x] Update keys page to show custody model badge
+- [x] Add self-custody disclaimer acceptance UI (in activate-key response)
 
-### Agent SDK
+### Agent SDK (CIRISAgent)
 
-- [ ] Ed25519 keypair generation utility
-- [ ] Secure storage abstraction (platform-specific)
-- [ ] Self-custody registration flow
-- [ ] Signing utility with memory clearing
+- [ ] Use existing ephemeral key from CIRISVerify (NO new generation needed)
+- [ ] Implement self-custody registration flow using ephemeral key
+- [ ] Update device activation to call `/api/device/register-key`
+- [ ] Update device activation to call `/api/device/activate-key`
+- [ ] Persist key_id returned from activation for future signing operations
+
+---
+
+## 11. Agent Implementation Guide
+
+### 11.1 Key Insight: Use the Ephemeral Key
+
+**Critical:** Agents do NOT need to generate a new keypair for self-custody.
+
+During the CIRISVerify attestation process, the agent already generates an Ed25519 ephemeral keypair for attestation signing. This same keypair should be promoted to the agent's permanent signing identity:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CURRENT FLOW (Custodied)                                       │
+├─────────────────────────────────────────────────────────────────┤
+│  1. CIRISVerify generates ephemeral Ed25519 keypair             │
+│  2. Agent signs attestation with ephemeral key                  │
+│  3. Device auth completes → Portal generates SEPARATE key       │
+│  4. Portal returns new private key to agent                     │
+│  5. Agent discards ephemeral key, uses Portal-generated key     │
+└─────────────────────────────────────────────────────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  NEW FLOW (Self-Custody)                                        │
+├─────────────────────────────────────────────────────────────────┤
+│  1. CIRISVerify generates ephemeral Ed25519 keypair             │
+│  2. Agent signs attestation with ephemeral key                  │
+│  3. Device auth completes                                       │
+│  4. Agent KEEPS ephemeral key, registers PUBLIC KEY with Portal │
+│  5. Agent proves possession, key becomes permanent identity     │
+│  6. No key ever leaves agent control                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 11.2 Agent Code Changes
+
+**Before (custodied flow in device activation):**
+
+```python
+# OLD: Agent receives key from Portal
+response = poll_device_token(device_code)
+if response.status == "provisioned":
+    # Portal generated this key
+    private_key = response.private_key
+    save_signing_key(private_key)
+```
+
+**After (self-custody flow):**
+
+```python
+# NEW: Agent uses its own ephemeral key
+from ciris_verify import get_ephemeral_keypair
+
+# Step 1: Device auth as usual
+response = start_device_auth()
+device_code = response.device_code
+
+# Step 2: Poll until authorized (user approved in browser)
+while True:
+    status = poll_device_status(device_code)
+    if status == "authorized":
+        break
+    sleep(status.interval)
+
+# Step 3: Get the ephemeral keypair we already have
+private_key, public_key = get_ephemeral_keypair()
+
+# Step 4: Register our public key with Portal
+reg_response = requests.post(
+    f"{PORTAL_URL}/api/device/register-key",
+    json={
+        "device_code": device_code,
+        "ed25519_public_key": public_key.hex(),
+        "ed25519_signature": sign_challenge(
+            private_key,
+            reg_response.challenge  # From GET first
+        ).hex(),
+        "key_label": f"Agent {agent_id}"
+    }
+)
+
+key_id = reg_response.json()["key_id"]
+activation_challenge = bytes.fromhex(
+    reg_response.json()["activation_challenge"]
+)
+
+# Step 5: Activate by proving we control the private key
+activation_sig = sign(private_key, activation_challenge)
+
+activate_response = requests.post(
+    f"{PORTAL_URL}/api/device/activate-key",
+    json={
+        "device_code": device_code,
+        "key_id": key_id,
+        "activation_challenge": activation_challenge.hex(),
+        "ed25519_signature": activation_sig.hex(),
+        "agent_hash": get_agent_hash()
+    }
+)
+
+# Step 6: Persist the key_id and keep using ephemeral key
+save_key_id(key_id)
+save_signing_key(private_key)  # Same key, now permanent!
+
+print(f"Self-custody key activated: {key_id}")
+print("You control this key. CIRIS cannot sign on your behalf.")
+```
+
+### 11.3 API Flow Summary
+
+```
+Agent                          Portal                         Registry
+  │                              │                              │
+  │ 1. GET /api/device/start     │                              │
+  │ ────────────────────────────►│                              │
+  │ ◄──── device_code, user_code │                              │
+  │                              │                              │
+  │ [User approves in browser]   │                              │
+  │                              │                              │
+  │ 2. GET /api/device/token     │                              │
+  │ ────────────────────────────►│                              │
+  │ ◄──── status: "authorized"   │                              │
+  │                              │                              │
+  │ 3. POST /api/device/register-key                            │
+  │    {public_key, signature}   │                              │
+  │ ────────────────────────────►│ RegisterPublicKey            │
+  │                              │ ────────────────────────────►│
+  │                              │ ◄──── key_id, activation_chal│
+  │ ◄──── key_id, activation_chal│                              │
+  │                              │                              │
+  │ 4. POST /api/device/activate-key                            │
+  │    {key_id, signed_challenge}│                              │
+  │ ────────────────────────────►│ ActivateSelfCustodyKey       │
+  │                              │ ────────────────────────────►│
+  │                              │ ◄──── success                │
+  │ ◄──── activated: true        │                              │
+  │                              │                              │
+  │ [Key is now ACTIVE]          │                              │
+```
+
+### 11.4 Why This Works
+
+1. **Same cryptographic strength** — The ephemeral key uses Ed25519, same as custodied keys
+2. **Already securely generated** — CIRISVerify uses CSPRNG with hardware entropy when available
+3. **No key transmission** — Private key never leaves the agent process
+4. **Proof of possession** — Two-step challenge-response proves agent controls the key
+5. **Hardware binding preserved** — If ephemeral key was generated in TPM/Secure Enclave, binding carries forward
+
+### 11.5 Agent SDK Checklist
+
+```
+[ ] Locate ephemeral keypair from CIRISVerify attestation
+[ ] Export public key in hex format (32 bytes → 64 hex chars)
+[ ] Implement challenge signing for registration
+[ ] Call POST /api/device/register-key after device authorization
+[ ] Store key_id from registration response
+[ ] Sign activation_challenge
+[ ] Call POST /api/device/activate-key
+[ ] Persist key_id alongside existing key storage
+[ ] Update signing operations to use stored key_id for audit correlation
+```
+
+### 11.6 Error Handling
+
+| Error                     | Cause                       | Resolution                     |
+| ------------------------- | --------------------------- | ------------------------------ |
+| `already registered`      | Public key exists in system | Key reuse - generate new agent |
+| `verification failed`     | Bad signature               | Check signing matches pubkey   |
+| `not in PENDING`          | Key already activated       | Check key_id, may be duplicate |
+| `expired challenge`       | Took too long               | Start registration flow over   |
+| `Invalid or expired code` | Device session gone         | Restart device auth flow       |
 
 ---
 
