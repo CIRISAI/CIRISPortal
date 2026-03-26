@@ -373,81 +373,500 @@ Self-custody operations logged for compliance:
 
 ---
 
-## 6. Implementation Plan
+## 6. Implementation Scaffold
 
-### 6.1 Phase 1: Proto and Registry (Week 1-2)
+### 6.1 CIRISRegistry Proto Additions
 
-**CIRISRegistry changes:**
+Add to `protocol/ciris_registry.proto`:
 
-1. Add proto messages:
-   - `RegisterPublicKeyRequest/Response`
-   - `ActivateSelfCustodyKeyRequest`
-   - `RotateSelfCustodyKeyRequest`
-   - `KeyGenerationAttestation`
+```protobuf
+// ============================================================================
+// SELF-CUSTODY KEY REGISTRATION (v1.3.0)
+// ============================================================================
 
-2. Implement RPCs:
-   - `RegisterPublicKey` — Store public key, return challenge
-   - `ActivateSelfCustodyKey` — Verify proof, activate key
-   - `RotateSelfCustodyKey` — Dual-signature rotation
+message GetRegistrationChallengeRequest {
+  string org_id = 1;
+  RequestContext context = 10;
+}
 
-3. Database schema:
-   - Add `custody_model` column to keys table
-   - Index for `public_key_hash` uniqueness check
-   - No private key storage for self-custody
+message GetRegistrationChallengeResponse {
+  bytes challenge = 1;                 // 32-byte nonce
+  int64 expires_at = 2;                // Unix timestamp
+  ResponseContext context = 50;
+}
 
-### 6.2 Phase 2: Portal Integration (Week 2-3)
+message RegisterPublicKeyRequest {
+  string org_id = 1;
 
-**CIRISPortal changes:**
+  // Public keys
+  bytes ed25519_public_key = 2;        // 32 bytes, required
+  bytes ml_dsa_65_public_key = 3;      // ~1952 bytes, optional
 
-1. gRPC client functions:
-   - `registerPublicKey()`
-   - `activateSelfCustodyKey()`
-   - `rotateSelfCustodyKey()`
+  // Proof of possession
+  bytes registration_challenge = 10;
+  bytes ed25519_signature = 11;
+  bytes ml_dsa_65_signature = 12;
 
-2. Device auth flow update:
-   - New path for self-custody agents
-   - Skip key generation step
-   - Accept public key from agent
+  // Metadata
+  string requester_user_id = 20;
+  string key_label = 21;
 
-3. UI updates:
-   - Key management page shows custody model
-   - Self-custody keys show "Customer Managed" badge
-   - No "Rotate" button for self-custody (agent must initiate)
+  RequestContext context = 50;
+}
 
-### 6.3 Phase 3: Agent SDK (Week 3-4)
+message RegisterPublicKeyResponse {
+  PartnerKeyRecord key_record = 1;
+  bytes activation_challenge = 2;
+  ErrorDetail error = 40;
+  ResponseContext context = 50;
+}
 
-**Agent implementation:**
+message ActivateSelfCustodyKeyRequest {
+  string org_id = 1;
+  string key_id = 2;
 
-1. Key generation utilities:
-   - Ed25519 keypair generation
-   - Secure storage abstraction (HSM, TPM, Keychain)
-   - ML-DSA-65 generation (when available)
+  bytes activation_challenge = 10;
+  bytes ed25519_signature = 11;
+  bytes ml_dsa_65_signature = 12;
 
-2. Registration flow:
-   - Generate keypair locally
-   - Request registration challenge from Portal
-   - Sign challenge and submit with public key
-   - Store private key securely
+  string agent_hash = 20;
 
-3. Signing utilities:
-   - Load private key from secure storage
-   - Sign messages/transactions
-   - Clear key from memory after use
+  RequestContext context = 50;
+}
 
-### 6.4 Phase 4: Migration Path (Week 4-5)
+message RotateSelfCustodyKeyRequest {
+  string org_id = 1;
+  string new_key_id = 2;
 
-**For existing custodied keys:**
+  bytes rotation_challenge = 10;
+  bytes old_key_signature = 11;
+  bytes new_key_signature = 12;
 
-1. No forced migration — custodied keys remain valid
-2. Optional migration path:
-   - Agent generates new self-custody keypair
-   - Agent registers new public key
-   - Agent requests rotation from custodied to self-custody
-   - Old custodied key marked ROTATED after grace period
+  KeyRotationMode mode = 20;
+  int32 grace_period_hours = 21;
+  string reason = 22;
 
-3. Org-level setting:
-   - `require_self_custody: bool` — Reject new custodied registrations
-   - Allows gradual transition
+  RequestContext context = 50;
+}
+```
+
+Add to `service PortalService`:
+
+```protobuf
+  // Self-custody key management (v1.3.0)
+  rpc GetRegistrationChallenge(GetRegistrationChallengeRequest) returns (GetRegistrationChallengeResponse);
+  rpc RegisterPublicKey(RegisterPublicKeyRequest) returns (RegisterPublicKeyResponse);
+  rpc ActivateSelfCustodyKey(ActivateSelfCustodyKeyRequest) returns (AdminResponse);
+  rpc RotateSelfCustodyKey(RotateSelfCustodyKeyRequest) returns (RotateKeyResponse);
+```
+
+### 6.2 CIRISRegistry Rust Implementation
+
+`rust-registry/src/services/portal.rs`:
+
+```rust
+async fn get_registration_challenge(
+    &self,
+    request: Request<GetRegistrationChallengeRequest>,
+) -> Result<Response<GetRegistrationChallengeResponse>, Status> {
+    let req = request.into_inner();
+
+    // Generate 32-byte challenge
+    let mut challenge = [0u8; 32];
+    OsRng.fill_bytes(&mut challenge);
+
+    // Store challenge with 5-minute expiry
+    let expires_at = Utc::now().timestamp() + 300;
+    self.challenge_store.insert(
+        req.org_id.clone(),
+        challenge.to_vec(),
+        expires_at
+    ).await?;
+
+    Ok(Response::new(GetRegistrationChallengeResponse {
+        challenge: challenge.to_vec(),
+        expires_at,
+        context: Some(build_response_context(&req.context)),
+    }))
+}
+
+async fn register_public_key(
+    &self,
+    request: Request<RegisterPublicKeyRequest>,
+) -> Result<Response<RegisterPublicKeyResponse>, Status> {
+    let req = request.into_inner();
+
+    // 1. Validate challenge
+    let stored_challenge = self.challenge_store
+        .get_and_remove(&req.org_id)
+        .await?
+        .ok_or_else(|| Status::invalid_argument("Invalid or expired challenge"))?;
+
+    if stored_challenge != req.registration_challenge {
+        return Err(Status::invalid_argument("Challenge mismatch"));
+    }
+
+    // 2. Verify signature over challenge
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(
+        &req.ed25519_public_key.try_into()
+            .map_err(|_| Status::invalid_argument("Invalid public key length"))?
+    ).map_err(|_| Status::invalid_argument("Invalid public key"))?;
+
+    let signature = ed25519_dalek::Signature::from_bytes(
+        &req.ed25519_signature.try_into()
+            .map_err(|_| Status::invalid_argument("Invalid signature length"))?
+    );
+
+    public_key.verify_strict(&req.registration_challenge, &signature)
+        .map_err(|_| Status::invalid_argument("Signature verification failed"))?;
+
+    // 3. Check for duplicate public key across all orgs
+    let pub_key_hash = sha256_hex(&req.ed25519_public_key);
+    if self.db.public_key_exists(&pub_key_hash).await? {
+        return Err(Status::already_exists("Public key already registered"));
+    }
+
+    // 4. Create key record (PENDING status)
+    let key_id = Uuid::new_v4().to_string();
+    let key_record = PartnerKeyRecord {
+        key_id: key_id.clone(),
+        org_id: req.org_id.clone(),
+        custody_model: KeyCustodyModel::SelfSovereign as i32,
+        status: KeyStatus::Pending as i32,
+        public_keys: Some(PublicKeys {
+            ed25519_public_key: req.ed25519_public_key.clone(),
+            ed25519_fingerprint: format!("SHA256:{}", &pub_key_hash[..16]),
+            ml_dsa65_public_key: req.ml_dsa_65_public_key.clone(),
+            ..Default::default()
+        }),
+        created_at: Utc::now().timestamp_millis(),
+        created_by: req.requester_user_id.clone(),
+        ..Default::default()
+    };
+
+    self.db.insert_key_record(&key_record, &pub_key_hash).await?;
+
+    // 5. Generate activation challenge
+    let mut activation_challenge = [0u8; 32];
+    OsRng.fill_bytes(&mut activation_challenge);
+    self.activation_store.insert(&key_id, activation_challenge.to_vec()).await?;
+
+    Ok(Response::new(RegisterPublicKeyResponse {
+        key_record: Some(key_record),
+        activation_challenge: activation_challenge.to_vec(),
+        ..Default::default()
+    }))
+}
+
+async fn activate_self_custody_key(
+    &self,
+    request: Request<ActivateSelfCustodyKeyRequest>,
+) -> Result<Response<AdminResponse>, Status> {
+    let req = request.into_inner();
+
+    // 1. Get pending key record
+    let key_record = self.db.get_key_record(&req.org_id, &req.key_id).await?
+        .ok_or_else(|| Status::not_found("Key not found"))?;
+
+    if key_record.status != KeyStatus::Pending as i32 {
+        return Err(Status::failed_precondition("Key not in PENDING status"));
+    }
+
+    if key_record.custody_model != KeyCustodyModel::SelfSovereign as i32 {
+        return Err(Status::failed_precondition("Not a self-custody key"));
+    }
+
+    // 2. Verify activation signature
+    let stored_challenge = self.activation_store
+        .get_and_remove(&req.key_id)
+        .await?
+        .ok_or_else(|| Status::invalid_argument("Invalid or expired activation challenge"))?;
+
+    if stored_challenge != req.activation_challenge {
+        return Err(Status::invalid_argument("Challenge mismatch"));
+    }
+
+    let public_keys = key_record.public_keys
+        .ok_or_else(|| Status::internal("Key record missing public keys"))?;
+
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(
+        &public_keys.ed25519_public_key.try_into()
+            .map_err(|_| Status::internal("Invalid stored public key"))?
+    ).map_err(|_| Status::internal("Invalid stored public key"))?;
+
+    let signature = ed25519_dalek::Signature::from_bytes(
+        &req.ed25519_signature.try_into()
+            .map_err(|_| Status::invalid_argument("Invalid signature"))?
+    );
+
+    public_key.verify_strict(&req.activation_challenge, &signature)
+        .map_err(|_| Status::invalid_argument("Activation signature verification failed"))?;
+
+    // 3. Activate key
+    self.db.update_key_status(
+        &req.org_id,
+        &req.key_id,
+        KeyStatus::Active,
+        Some(&req.agent_hash),
+    ).await?;
+
+    // 4. Audit log
+    self.audit_log(AuditActionType::KeyActivated, &req.org_id, &req.key_id).await?;
+
+    Ok(Response::new(AdminResponse {
+        success: true,
+        message: "Key activated".to_string(),
+        ..Default::default()
+    }))
+}
+```
+
+### 6.3 CIRISPortal gRPC Client
+
+Add to `lib/grpc/client.ts`:
+
+```typescript
+export async function getRegistrationChallenge(params: {
+  orgId: string;
+}): Promise<{ challenge: Uint8Array; expiresAt: number }> {
+  return promisifyUnaryAuth(getPortalClient(), 'getRegistrationChallenge', {
+    context: buildContext(),
+    orgId: params.orgId,
+  });
+}
+
+export async function registerPublicKey(params: {
+  orgId: string;
+  ed25519PublicKey: Uint8Array;
+  mlDsa65PublicKey?: Uint8Array;
+  registrationChallenge: Uint8Array;
+  ed25519Signature: Uint8Array;
+  mlDsa65Signature?: Uint8Array;
+  requesterUserId: string;
+  keyLabel?: string;
+}): Promise<{
+  keyRecord: PartnerKeyRecord;
+  activationChallenge: Uint8Array;
+}> {
+  return promisifyUnaryAuth(getPortalClient(), 'registerPublicKey', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+export async function activateSelfCustodyKey(params: {
+  orgId: string;
+  keyId: string;
+  activationChallenge: Uint8Array;
+  ed25519Signature: Uint8Array;
+  mlDsa65Signature?: Uint8Array;
+  agentHash: string;
+}): Promise<{ success: boolean; message: string }> {
+  return promisifyUnaryAuth(getPortalClient(), 'activateSelfCustodyKey', {
+    context: buildContext(),
+    ...params,
+  });
+}
+
+export async function rotateSelfCustodyKey(params: {
+  orgId: string;
+  newKeyId: string;
+  rotationChallenge: Uint8Array;
+  oldKeySignature: Uint8Array;
+  newKeySignature: Uint8Array;
+  mode?: KeyRotationMode;
+  gracePeriodHours?: number;
+  reason?: string;
+}): Promise<RotateKeyResponse> {
+  return promisifyUnaryAuth(getPortalClient(), 'rotateSelfCustodyKey', {
+    context: buildContext(),
+    ...params,
+  });
+}
+```
+
+### 6.4 CIRISPortal Device Auth Flow
+
+Add to `app/api/device/register-key/route.ts`:
+
+```typescript
+import { NextResponse } from 'next/server';
+import { getByDeviceCode, updateRecord } from '@/lib/device-auth/store';
+import {
+  getRegistrationChallenge,
+  registerPublicKey,
+  activateSelfCustodyKey,
+} from '@/lib/grpc/client';
+
+/**
+ * POST /api/device/register-key
+ *
+ * Self-custody flow: Agent registers its own public key
+ */
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const {
+      device_code,
+      ed25519_public_key, // hex
+      ed25519_signature, // hex (over challenge)
+      agent_hash,
+    } = body;
+
+    // 1. Validate device session
+    const record = await getByDeviceCode(device_code);
+    if (!record || record.status !== 'authorized') {
+      return NextResponse.json(
+        { error: 'Invalid or unauthorized device' },
+        { status: 403 }
+      );
+    }
+
+    if (!record.orgId) {
+      return NextResponse.json(
+        { error: 'Device not linked to organization' },
+        { status: 400 }
+      );
+    }
+
+    // 2. Get registration challenge
+    const { challenge } = await getRegistrationChallenge({
+      orgId: record.orgId,
+    });
+
+    // 3. Register public key
+    const pubKeyBytes = Buffer.from(ed25519_public_key, 'hex');
+    const sigBytes = Buffer.from(ed25519_signature, 'hex');
+
+    const { keyRecord, activationChallenge } = await registerPublicKey({
+      orgId: record.orgId,
+      ed25519PublicKey: new Uint8Array(pubKeyBytes),
+      registrationChallenge: new Uint8Array(challenge),
+      ed25519Signature: new Uint8Array(sigBytes),
+      requesterUserId: record.userId || 'device-auth',
+      keyLabel: `Agent ${record.userCode}`,
+    });
+
+    // 4. Return activation challenge for agent to sign
+    return NextResponse.json({
+      key_id: keyRecord.keyId,
+      activation_challenge: Buffer.from(activationChallenge).toString('hex'),
+      public_key_fingerprint: keyRecord.publicKeys?.ed25519Fingerprint,
+    });
+  } catch (error) {
+    console.error('[Device Register Key] Error:', error);
+    return NextResponse.json(
+      { error: 'Key registration failed' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+Add `app/api/device/activate-key/route.ts`:
+
+```typescript
+import { NextResponse } from 'next/server';
+import { getByDeviceCode, updateRecord } from '@/lib/device-auth/store';
+import { activateSelfCustodyKey } from '@/lib/grpc/client';
+
+/**
+ * POST /api/device/activate-key
+ *
+ * Self-custody flow: Agent proves possession by signing activation challenge
+ */
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const {
+      device_code,
+      key_id,
+      activation_challenge, // hex
+      ed25519_signature, // hex
+      agent_hash,
+    } = body;
+
+    // 1. Validate device session
+    const record = await getByDeviceCode(device_code);
+    if (!record || record.status !== 'authorized') {
+      return NextResponse.json(
+        { error: 'Invalid or unauthorized device' },
+        { status: 403 }
+      );
+    }
+
+    // 2. Activate key
+    const result = await activateSelfCustodyKey({
+      orgId: record.orgId!,
+      keyId: key_id,
+      activationChallenge: new Uint8Array(
+        Buffer.from(activation_challenge, 'hex')
+      ),
+      ed25519Signature: new Uint8Array(Buffer.from(ed25519_signature, 'hex')),
+      agentHash: agent_hash,
+    });
+
+    // 3. Update device record
+    await updateRecord(record.deviceCode, {
+      status: 'provisioned',
+      keyActivated: true,
+      provisionedKey: {
+        keyId: key_id,
+        orgId: record.orgId!,
+        ed25519PublicKey: '', // Agent holds private key
+        ed25519PrivateKey: '', // NOT STORED
+      },
+    });
+
+    return NextResponse.json({
+      activated: true,
+      key_id,
+      message: 'Self-custody key activated. You control the private key.',
+    });
+  } catch (error) {
+    console.error('[Device Activate Key] Error:', error);
+    return NextResponse.json(
+      { error: 'Key activation failed' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### 6.5 Database Schema
+
+Add to CIRISRegistry migrations:
+
+```sql
+-- Add public_key_hash index for duplicate detection
+CREATE INDEX idx_partner_keys_public_key_hash
+ON partner_keys(public_key_hash);
+
+-- Add unique constraint
+ALTER TABLE partner_keys
+ADD CONSTRAINT unique_public_key_hash UNIQUE (public_key_hash);
+
+-- Challenge store table
+CREATE TABLE registration_challenges (
+  org_id TEXT NOT NULL,
+  challenge BYTEA NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (org_id)
+);
+
+CREATE TABLE activation_challenges (
+  key_id TEXT NOT NULL,
+  challenge BYTEA NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (key_id)
+);
+
+-- Cleanup job
+CREATE INDEX idx_challenges_expires ON registration_challenges(expires_at);
+CREATE INDEX idx_activation_expires ON activation_challenges(expires_at);
+```
 
 ---
 
@@ -565,13 +984,43 @@ Self-custody operations logged for compliance:
 
 ---
 
-## 9. Open Questions
+## 9. Build Checklist
 
-1. **ML-DSA-65 requirement** — Should PQ keys be mandatory for self-custody?
-2. **Hardware attestation** — Require proof of secure hardware for certain tiers?
-3. **Key escrow option** — Allow optional steward escrow for self-custody?
-4. **Rotation grace period** — Default 72h appropriate for self-custody?
-5. **Rate limiting** — Max key registrations per org per day?
+### Registry (CIRISRegistry)
+
+- [ ] Add proto messages to `protocol/ciris_registry.proto`
+- [ ] Add RPCs to `service PortalService`
+- [ ] Run `buf generate` to regenerate Rust types
+- [ ] Create `registration_challenges` table migration
+- [ ] Create `activation_challenges` table migration
+- [ ] Add `public_key_hash` unique constraint migration
+- [ ] Implement `get_registration_challenge` in `portal.rs`
+- [ ] Implement `register_public_key` in `portal.rs`
+- [ ] Implement `activate_self_custody_key` in `portal.rs`
+- [ ] Implement `rotate_self_custody_key` in `portal.rs`
+- [ ] Add audit logging for self-custody operations
+- [ ] Unit tests for signature verification
+- [ ] Integration tests for full flow
+
+### Portal (CIRISPortal)
+
+- [ ] Sync proto file from Registry
+- [ ] Add `getRegistrationChallenge` to gRPC client
+- [ ] Add `registerPublicKey` to gRPC client
+- [ ] Add `activateSelfCustodyKey` to gRPC client
+- [ ] Add `rotateSelfCustodyKey` to gRPC client
+- [ ] Create `/api/device/register-key` endpoint
+- [ ] Create `/api/device/activate-key` endpoint
+- [ ] Update device auth flow to support self-custody path
+- [ ] Update keys page to show custody model badge
+- [ ] Add self-custody disclaimer acceptance UI
+
+### Agent SDK
+
+- [ ] Ed25519 keypair generation utility
+- [ ] Secure storage abstraction (platform-specific)
+- [ ] Self-custody registration flow
+- [ ] Signing utility with memory clearing
 
 ---
 
@@ -620,14 +1069,35 @@ attestation = {
 }
 ```
 
-### C. Migration Checklist
+### C. Signature Verification Reference
 
-- [ ] Proto definitions added to CIRISRegistry
-- [ ] Registry RPCs implemented and tested
-- [ ] Portal gRPC client updated
-- [ ] Device auth flow supports self-custody
-- [ ] Key management UI updated
-- [ ] Agent SDK key generation utilities
-- [ ] Documentation updated
-- [ ] Legal review of disclaimers
-- [ ] Security audit completed
+```rust
+use ed25519_dalek::{Signature, VerifyingKey};
+
+fn verify_registration(
+    public_key: &[u8; 32],
+    challenge: &[u8],
+    signature: &[u8; 64],
+) -> Result<(), &'static str> {
+    let verifying_key = VerifyingKey::from_bytes(public_key)
+        .map_err(|_| "Invalid public key")?;
+
+    let sig = Signature::from_bytes(signature);
+
+    verifying_key.verify_strict(challenge, &sig)
+        .map_err(|_| "Signature verification failed")
+}
+```
+
+```typescript
+// Portal-side verification (for testing)
+import { verify } from '@noble/ed25519';
+
+async function verifySignature(
+  publicKey: Uint8Array,
+  challenge: Uint8Array,
+  signature: Uint8Array
+): Promise<boolean> {
+  return verify(signature, challenge, publicKey);
+}
+```
