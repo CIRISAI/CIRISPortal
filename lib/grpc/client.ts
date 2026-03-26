@@ -336,6 +336,111 @@ export async function revokeKey(params: {
 }
 
 // ============================================================================
+// Self-Custody Key Methods
+// ============================================================================
+
+export async function getRegistrationChallenge(params: {
+  orgId: string;
+}): Promise<{ challenge: Uint8Array; expiresAt: number }> {
+  const response: any = await promisifyUnaryAuth(
+    getPortalClient(),
+    'getRegistrationChallenge',
+    {
+      context: buildContext(),
+      orgId: params.orgId,
+    }
+  );
+  return {
+    challenge: response.challenge,
+    expiresAt: response.expiresAt,
+  };
+}
+
+export async function registerPublicKey(params: {
+  orgId: string;
+  ed25519PublicKey: Uint8Array;
+  mlDsa65PublicKey?: Uint8Array;
+  registrationChallenge: Uint8Array;
+  ed25519Signature: Uint8Array;
+  mlDsa65Signature?: Uint8Array;
+  requesterUserId: string;
+  keyLabel?: string;
+}): Promise<{
+  keyRecord: any;
+  activationChallenge: Uint8Array;
+}> {
+  const response: any = await promisifyUnaryAuth(
+    getPortalClient(),
+    'registerPublicKey',
+    {
+      context: buildContext(),
+      orgId: params.orgId,
+      ed25519PublicKey: params.ed25519PublicKey,
+      mlDsa65PublicKey: params.mlDsa65PublicKey,
+      registrationChallenge: params.registrationChallenge,
+      ed25519Signature: params.ed25519Signature,
+      mlDsa65Signature: params.mlDsa65Signature,
+      requesterUserId: params.requesterUserId,
+      keyLabel: params.keyLabel,
+    }
+  );
+  return {
+    keyRecord: response.keyRecord,
+    activationChallenge: response.activationChallenge,
+  };
+}
+
+export async function activateSelfCustodyKey(params: {
+  orgId: string;
+  keyId: string;
+  activationChallenge: Uint8Array;
+  ed25519Signature: Uint8Array;
+  mlDsa65Signature?: Uint8Array;
+  agentHash: string;
+}): Promise<{ success: boolean; message: string }> {
+  const response: any = await promisifyUnaryAuth(
+    getPortalClient(),
+    'activateSelfCustodyKey',
+    {
+      context: buildContext(),
+      orgId: params.orgId,
+      keyId: params.keyId,
+      activationChallenge: params.activationChallenge,
+      ed25519Signature: params.ed25519Signature,
+      mlDsa65Signature: params.mlDsa65Signature,
+      agentHash: params.agentHash,
+    }
+  );
+  return {
+    success: response.success,
+    message: response.message,
+  };
+}
+
+export async function rotateSelfCustodyKey(params: {
+  orgId: string;
+  newKeyId: string;
+  rotationChallenge: Uint8Array;
+  oldKeySignature: Uint8Array;
+  newKeySignature: Uint8Array;
+  mode?: number;
+  gracePeriodHours?: number;
+  reason?: string;
+}): Promise<any> {
+  return promisifyUnaryAuth(getPortalClient(), 'rotateSelfCustodyKey', {
+    context: buildContext(),
+    orgId: params.orgId,
+    newKeyId: params.newKeyId,
+    rotationChallenge: params.rotationChallenge,
+    oldKeySignature: params.oldKeySignature,
+    newKeySignature: params.newKeySignature,
+    mode: params.mode,
+    gracePeriodHours: params.gracePeriodHours,
+    reason: params.reason,
+  });
+}
+
+// ============================================================================
 // Audit Methods
 // ============================================================================
 

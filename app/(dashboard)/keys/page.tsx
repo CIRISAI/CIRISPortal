@@ -362,26 +362,64 @@ function ActiveKeyCard({
  */
 function CustodyInfoCard({ custodyModel }: { custodyModel?: KeyCustodyModel }) {
   const isCustodied = custodyModel === KeyCustodyModel.CUSTODIED;
+  const isSelfCustody = custodyModel === KeyCustodyModel.SELF_SOVEREIGN;
 
   return (
-    <Card className={isCustodied ? 'border-blue-200 bg-blue-50' : ''}>
+    <Card
+      className={
+        isCustodied
+          ? 'border-blue-200 bg-blue-50'
+          : isSelfCustody
+            ? 'border-green-200 bg-green-50'
+            : ''
+      }
+    >
       <CardContent className="flex gap-3 pt-6">
         <Shield
-          className={`mt-0.5 h-5 w-5 flex-shrink-0 ${isCustodied ? 'text-blue-600' : 'text-gray-600'}`}
+          className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
+            isCustodied
+              ? 'text-blue-600'
+              : isSelfCustody
+                ? 'text-green-600'
+                : 'text-gray-600'
+          }`}
         />
         <div>
-          <h3
-            className={`font-medium ${isCustodied ? 'text-blue-900' : 'text-gray-900'}`}
-          >
-            {isCustodied ? 'Custodied Keys' : 'Self-Custody Keys'}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3
+              className={`font-medium ${
+                isCustodied
+                  ? 'text-blue-900'
+                  : isSelfCustody
+                    ? 'text-green-900'
+                    : 'text-gray-900'
+              }`}
+            >
+              {isCustodied ? 'Custodied Keys' : 'Self-Custody Keys'}
+            </h3>
+            {isSelfCustody && (
+              <Badge className="bg-green-600 text-xs">YOU CONTROL</Badge>
+            )}
+          </div>
           <p
-            className={`mt-1 text-sm ${isCustodied ? 'text-blue-700' : 'text-gray-700'}`}
+            className={`mt-1 text-sm ${
+              isCustodied
+                ? 'text-blue-700'
+                : isSelfCustody
+                  ? 'text-green-700'
+                  : 'text-gray-700'
+            }`}
           >
             {isCustodied
               ? 'Your private keys are securely stored and managed by CIRIS. All signing operations are authenticated and logged. You can download your public keys at any time.'
-              : 'You manage your own private keys. Only public keys are registered with CIRIS for verification purposes.'}
+              : 'You manage your own private keys. Only public keys are registered with CIRIS for verification purposes. CIRIS cannot sign on your behalf.'}
           </p>
+          {isSelfCustody && (
+            <p className="mt-2 text-xs text-green-600">
+              You are solely responsible for key security and backup. CIRIS
+              cannot recover lost keys.
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
