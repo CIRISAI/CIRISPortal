@@ -1,9 +1,10 @@
 # FSD-002: Self-Custody Key Generation
 
-**Status:** DRAFT
+**Status:** IN PROGRESS (Registry Complete)
 **Author:** CIRISPortal Team
 **Created:** 2026-03-25
 **Last Updated:** 2026-03-25
+**Registry Commit:** 02a94ad
 
 ---
 
@@ -986,19 +987,18 @@ CREATE INDEX idx_activation_expires ON activation_challenges(expires_at);
 
 ## 9. Build Checklist
 
-### Registry (CIRISRegistry)
+### Registry (CIRISRegistry) ✅ COMPLETE
 
-- [ ] Add proto messages to `protocol/ciris_registry.proto`
-- [ ] Add RPCs to `service PortalService`
-- [ ] Run `buf generate` to regenerate Rust types
-- [ ] Create `registration_challenges` table migration
-- [ ] Create `activation_challenges` table migration
-- [ ] Add `public_key_hash` unique constraint migration
-- [ ] Implement `get_registration_challenge` in `portal.rs`
-- [ ] Implement `register_public_key` in `portal.rs`
-- [ ] Implement `activate_self_custody_key` in `portal.rs`
-- [ ] Implement `rotate_self_custody_key` in `portal.rs`
-- [ ] Add audit logging for self-custody operations
+- [x] Add proto messages to `protocol/ciris_registry.proto`
+- [x] Add RPCs to `service PortalService`
+- [x] Create `registration_challenges` table migration
+- [x] Create `activation_challenges` table migration
+- [x] Add `public_key_hash` unique constraint migration
+- [x] Implement `get_registration_challenge` in `portal.rs`
+- [x] Implement `register_public_key` in `portal.rs`
+- [x] Implement `activate_self_custody_key` in `portal.rs`
+- [x] Implement `rotate_self_custody_key` in `portal.rs`
+- [x] Add audit logging for self-custody operations
 - [ ] Unit tests for signature verification
 - [ ] Integration tests for full flow
 
