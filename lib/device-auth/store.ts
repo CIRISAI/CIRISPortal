@@ -67,6 +67,7 @@ export interface DeviceAuthRecord {
   stripeSessionId?: string; // Stripe checkout session for payment tracking
   paymentComplete?: boolean; // Set true after successful Stripe payment
   challengeNonce?: string; // Hex-encoded 32-byte nonce for CIRISVerify attestation
+  registrationChallenge?: string; // Hex-encoded challenge for self-custody key registration
   attestationProof?: Record<string, unknown>; // AttestationProof from CIRISVerify
   attestationVerified?: boolean; // Set true after server-side verification
   hardwareType?: string; // e.g. "TPM_2_0", "IOS_SECURE_ENCLAVE", "SOFTWARE_ONLY"

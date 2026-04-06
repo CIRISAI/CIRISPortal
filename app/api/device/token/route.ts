@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import {
   getByDeviceCode,
   consumeProvisionedKey,
+  updateRecord,
 } from '@/lib/device-auth/store';
 import { isLicensedTemplate } from '@/lib/packages/registry';
+import { getRegistrationChallenge } from '@/lib/grpc/client';
 
 /**
  * POST /api/device/token
@@ -59,15 +61,39 @@ export async function POST(request: Request) {
           { status: 428 }
         );
 
-      case 'authorized':
+      case 'authorized': {
         // User authenticated and paid — agent must now register its public key
         // SELF-CUSTODY: Agent generates keypair locally, registers PUBLIC KEY only
+
+        // Fetch registration challenge from Registry and store it
+        let registrationChallenge: string | undefined;
+        if (record.orgId) {
+          try {
+            const { challenge } = await getRegistrationChallenge({
+              orgId: record.orgId,
+            });
+            registrationChallenge = Buffer.from(challenge).toString('hex');
+
+            // Store challenge in device record for verification in register-key
+            await updateRecord(device_code, {
+              registrationChallenge,
+            });
+          } catch (err) {
+            console.error(
+              '[Device Token] Failed to get registration challenge:',
+              err
+            );
+            // Continue without challenge - register-key will fetch its own
+          }
+        }
+
         return NextResponse.json({
           status: 'authorized',
           custody_model: 'SELF_SOVEREIGN',
           next_step: 'register_key',
           device_code: device_code,
           org_id: record.orgId,
+          registration_challenge: registrationChallenge,
           agent_record: record.agentRecord
             ? {
                 identity_template: record.agentRecord.identityTemplate,
@@ -79,13 +105,15 @@ export async function POST(request: Request) {
           instructions: {
             step_1:
               'Generate Ed25519 keypair locally (or use CIRISVerify ephemeral key)',
-            step_2:
-              'POST /api/device/register-key with device_code, ed25519_public_key, ed25519_signature',
+            step_2: 'Sign the registration_challenge with your private key',
             step_3:
+              'POST /api/device/register-key with device_code, ed25519_public_key, ed25519_signature',
+            step_4:
               'POST /api/device/activate-key with signed activation_challenge',
             note: 'Private key NEVER leaves your device. CIRIS stores only your public key fingerprint.',
           },
         });
+      }
 
       case 'provisioned': {
         // SELF-CUSTODY: Key registered and activated — return confirmation (no private key!)

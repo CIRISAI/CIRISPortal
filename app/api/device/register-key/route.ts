@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getByDeviceCode, updateRecord } from '@/lib/device-auth/store';
-import { getRegistrationChallenge, registerPublicKey } from '@/lib/grpc/client';
+import { registerPublicKey } from '@/lib/grpc/client';
 
 /**
  * POST /api/device/register-key
@@ -52,10 +52,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Get registration challenge from Registry
-    const { challenge } = await getRegistrationChallenge({
-      orgId: record.orgId,
-    });
+    // 2. Use the stored registration challenge from /api/device/token
+    if (!record.registrationChallenge) {
+      return NextResponse.json(
+        {
+          error:
+            'No registration challenge found. Poll /api/device/token first to get the challenge.',
+        },
+        { status: 400 }
+      );
+    }
+
+    const challenge = Buffer.from(record.registrationChallenge, 'hex');
 
     // 3. Convert hex to Uint8Array
     const pubKeyBytes = new Uint8Array(Buffer.from(ed25519_public_key, 'hex'));
