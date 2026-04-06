@@ -24,11 +24,23 @@ export interface DeviceAuthAgentInfo {
 }
 
 export interface ProvisionedKey {
-  ed25519PrivateKey: string; // base64, one-time delivery
+  ed25519PrivateKey: string; // base64, one-time delivery (DEPRECATED: custodied flow only)
   ed25519PublicKey: string; // base64
   keyId: string;
   orgId: string;
   agentRecordHash?: string;
+}
+
+/**
+ * Self-custody key info - stores only public key metadata.
+ * Private key NEVER leaves the agent device.
+ */
+export interface SelfCustodyKeyInfo {
+  keyId: string; // Key ID from Registry
+  ed25519PublicKeyFingerprint: string; // SHA256 fingerprint of public key
+  ed25519PublicKey?: string; // hex-encoded public key (optional, fingerprint is canonical)
+  registeredAt: number; // Timestamp when key was registered
+  activated: boolean; // True after agent proves possession via activation challenge
 }
 
 export interface DeviceAuthRecord {
@@ -42,13 +54,15 @@ export interface DeviceAuthRecord {
   orgId?: string; // Set after OAuth
   selectedTemplate?: string;
   selectedAdapters?: string[];
-  provisionedKey?: ProvisionedKey;
+  provisionedKey?: ProvisionedKey; // DEPRECATED: Only for legacy custodied flow
+  selfCustodyKey?: SelfCustodyKeyInfo; // Self-custody: public key registered by agent
   agentRecord?: {
     identityTemplate: string;
     stewardshipTier: number;
     permittedActions: string[];
     approvedAdapters: string[];
   };
+  agentRecordHash?: string; // Agent identity hash (build hash for CIRIS, random for non-CIRIS)
   agentCategory?: 'ciris' | 'non_ciris'; // CIRIS or third-party agent
   stripeSessionId?: string; // Stripe checkout session for payment tracking
   paymentComplete?: boolean; // Set true after successful Stripe payment
@@ -249,6 +263,9 @@ export async function updateRecord(
 /**
  * Mark a record as provisioned with the signing key and agent metadata.
  * After this, the next agent poll will receive the key (one-time delivery).
+ *
+ * @deprecated Use completeSelfCustodyRegistration for self-custody flow.
+ * This function is only for legacy custodied key delivery.
  */
 export async function completeProvisioning(
   deviceCode: string,
@@ -259,6 +276,22 @@ export async function completeProvisioning(
     status: 'provisioned',
     provisionedKey: key,
     agentRecord,
+  });
+}
+
+/**
+ * Complete self-custody key registration.
+ * Stores ONLY public key metadata - private key never leaves the agent device.
+ *
+ * Called after agent successfully registers its public key via /api/device/register-key.
+ */
+export async function completeSelfCustodyRegistration(
+  deviceCode: string,
+  keyInfo: SelfCustodyKeyInfo
+): Promise<DeviceAuthRecord | undefined> {
+  return updateRecord(deviceCode, {
+    status: 'provisioned',
+    selfCustodyKey: keyInfo,
   });
 }
 

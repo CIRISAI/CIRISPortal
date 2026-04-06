@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { constructWebhookEvent } from '@/lib/stripe/service';
 import { isStripeConfigured } from '@/lib/stripe/config';
-import { generateKeyPair } from '@/lib/grpc/client';
 import { markDevicePaymentComplete } from '@/lib/device-auth/store';
 
 /**
@@ -54,31 +53,14 @@ export async function POST(request: NextRequest) {
           );
 
           // Mark device auth record as paid (if this was a device auth checkout)
+          // Self-custody: Agent will register its own public key via /api/device/register-key
+          // No server-side key generation - private keys never leave the agent device
           await markDevicePaymentComplete(session.id);
 
-          // Auto-generate key for the org that paid
-          if (metadata.org_id && metadata.user_id) {
-            try {
-              const keyResponse = await generateKeyPair({
-                orgId: metadata.org_id,
-                requesterUserId: metadata.user_id,
-                activateImmediately: true,
-              });
-              console.log(
-                `[Webhook] Key auto-generated for org ${metadata.org_id}: ${keyResponse?.keyRecord?.keyId || keyResponse?.key_record?.key_id || 'unknown'}`
-              );
-            } catch (keyError) {
-              console.error(
-                `[Webhook] Failed to auto-generate key for org ${metadata.org_id}:`,
-                keyError
-              );
-              // Payment succeeded but key generation failed — needs manual follow-up
-            }
-          } else {
-            console.warn(
-              '[Webhook] Activation payment missing org_id/user_id in metadata — key not auto-generated'
-            );
-          }
+          console.log(
+            `[Webhook] Payment complete for org ${metadata.org_id}. ` +
+              `Agent should now call /api/device/register-key to register self-custody public key.`
+          );
         } else if (metadata.type === 'tier_subscription') {
           console.log(`[Webhook] Subscription started: tier=${metadata.tier}`);
           // TODO: Update org tier in Registry

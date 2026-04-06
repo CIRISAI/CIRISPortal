@@ -87,15 +87,21 @@ export async function POST(request: Request) {
     }
 
     // 4. Update device record - mark as provisioned with self-custody key
+    // Update the selfCustodyKey to mark it as activated (set in register-key)
+    const updatedSelfCustodyKey = record.selfCustodyKey
+      ? { ...record.selfCustodyKey, activated: true }
+      : {
+          keyId: key_id,
+          ed25519PublicKeyFingerprint: '',
+          registeredAt: Date.now(),
+          activated: true,
+        };
+
     await updateRecord(record.deviceCode, {
       status: 'provisioned',
       keyActivated: true,
-      provisionedKey: {
-        keyId: key_id,
-        orgId: record.orgId,
-        ed25519PublicKey: '', // Agent holds public key
-        ed25519PrivateKey: '', // NOT STORED - self-custody
-      },
+      selfCustodyKey: updatedSelfCustodyKey,
+      // Note: provisionedKey is NOT set - no private key custody!
     });
 
     console.log(

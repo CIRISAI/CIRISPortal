@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import {
-  getByUserCode,
-  updateRecord,
-  completeProvisioning,
-} from '@/lib/device-auth/store';
-import { registerAgent, generateKeyPair } from '@/lib/grpc/client';
+import { getByUserCode, updateRecord } from '@/lib/device-auth/store';
+import { registerAgent } from '@/lib/grpc/client';
 import { getAllowedTemplates } from '@/lib/device-auth/abac';
 import { TEMPLATE_PRESETS } from '@/lib/templates';
 import {
@@ -25,8 +21,12 @@ import crypto from 'crypto';
  * 2. Verifies payment was completed (device record has paymentComplete flag)
  * 3. Verifies the selected template is ABAC-allowed
  * 4. Registers the agent in CIRISRegistry (CIRIS or non-CIRIS type)
- * 5. Generates a signing keypair via CIRISRegistry
- * 6. Stores the provisioned key for agent polling
+ * 5. Marks device as authorized for self-custody key registration
+ *
+ * SELF-CUSTODY MODEL: No keys are generated server-side.
+ * After this endpoint returns success, the agent must call
+ * POST /api/device/register-key with its locally-generated public key.
+ * Private keys NEVER leave the agent device.
  *
  * Requires NextAuth session (user must be logged in via OAuth).
  * Requires prior payment via /api/device/checkout → Stripe.
@@ -153,15 +153,6 @@ export async function POST(request: Request) {
 
     const selectedAdapters: string[] = adapters || template.adapters;
 
-    // Mark as authorized with user info
-    await updateRecord(record.deviceCode, {
-      status: 'authorized',
-      userId: session.user.email,
-      orgId,
-      selectedTemplate: template_id,
-      selectedAdapters,
-    });
-
     // Agent identity ID: for CIRIS agents, use the attested build hash from
     // CIRISVerify (links identity to a verified binary for inspection).
     // For non-CIRIS agents, generate a random identity ID (no build linkage;
@@ -198,48 +189,7 @@ export async function POST(request: Request) {
         'code:',
         regError?.code
       );
-      // Continue anyway — key generation is more important
-      // TODO: Make this atomic (register + key gen in one gRPC call)
-    }
-
-    // Generate signing keypair via Registry
-    let keyData;
-    try {
-      keyData = await generateKeyPair({
-        orgId,
-        requesterUserId: session.user.email,
-        activateImmediately: true,
-      });
-    } catch (keyError: any) {
-      console.error('[Device Auth] Key generation failed:', keyError);
-      await updateRecord(record.deviceCode, { status: 'denied' });
-      return NextResponse.json(
-        {
-          error: 'Key generation failed',
-          details: keyError?.message || String(keyError),
-          code: keyError?.code,
-          grpc_url:
-            process.env.REGISTRY_GRPC_URL || 'localhost:50052 (default)',
-        },
-        { status: 500 }
-      );
-    }
-
-    // Extract key material from response
-    const privateKeyBytes =
-      keyData.ed25519PrivateKey || keyData.ed25519_private_key;
-    const publicKeyBytes = keyData.keyRecord?.publicKeys?.ed25519PublicKey;
-    const keyId = keyData.keyRecord?.keyId || '';
-
-    function toBase64(value: any): string {
-      if (value?.type === 'Buffer' && Array.isArray(value.data)) {
-        return Buffer.from(value.data).toString('base64');
-      }
-      if (Buffer.isBuffer(value)) {
-        return value.toString('base64');
-      }
-      if (typeof value === 'string') return value;
-      return '';
+      // Continue anyway — self-custody key registration can still proceed
     }
 
     // Build package download URL for licensed templates
@@ -253,28 +203,29 @@ export async function POST(request: Request) {
       }
     }
 
-    // Complete provisioning — next agent poll will get the key
-    await completeProvisioning(
-      record.deviceCode,
-      {
-        ed25519PrivateKey: toBase64(privateKeyBytes),
-        ed25519PublicKey: toBase64(publicKeyBytes),
-        keyId,
-        orgId,
-        agentRecordHash: agentIdentityId,
-      },
-      {
+    // Mark as authorized with user info and agent metadata
+    // SELF-CUSTODY: No keys generated here. Agent will register its public key
+    // via /api/device/register-key using the device_code.
+    await updateRecord(record.deviceCode, {
+      status: 'authorized',
+      userId: session.user.email,
+      orgId,
+      selectedTemplate: template_id,
+      selectedAdapters,
+      agentRecord: {
         identityTemplate: template_id,
         stewardshipTier: template.tier,
         permittedActions: template.actions,
         approvedAdapters: selectedAdapters,
-      }
-    );
+      },
+      agentRecordHash: agentIdentityId,
+      packageDownloadUrl,
+    });
 
-    // Set package download URL on the record if applicable
-    if (packageDownloadUrl) {
-      await updateRecord(record.deviceCode, { packageDownloadUrl });
-    }
+    console.log(
+      `[Device Auth] Authorized ${record.userCode} for self-custody. ` +
+        `Agent should call /api/device/register-key with device_code=${record.deviceCode}`
+    );
 
     return NextResponse.json({
       success: true,
@@ -282,6 +233,10 @@ export async function POST(request: Request) {
       adapters: selectedAdapters,
       licensed: isLicensedTemplate(template_id),
       package_download_url: packageDownloadUrl || null,
+      custody_model: 'SELF_SOVEREIGN',
+      next_step:
+        'Agent must call POST /api/device/register-key with its public key',
+      device_code: record.deviceCode,
     });
   } catch (error) {
     console.error('[Device Auth] Complete error:', error);

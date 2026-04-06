@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getByDeviceCode } from '@/lib/device-auth/store';
+import { getByDeviceCode, updateRecord } from '@/lib/device-auth/store';
 import { getRegistrationChallenge, registerPublicKey } from '@/lib/grpc/client';
 
 /**
@@ -85,16 +85,32 @@ export async function POST(request: Request) {
       keyLabel: key_label || `Agent ${record.userCode}`,
     });
 
+    // 5. Store self-custody key info in device record (public key only!)
+    const fingerprint =
+      keyRecord.publicKeys?.ed25519Fingerprint ||
+      keyRecord.publicKeys?.ed25519_fingerprint ||
+      '';
+
+    await updateRecord(record.deviceCode, {
+      selfCustodyKey: {
+        keyId: keyRecord.keyId,
+        ed25519PublicKeyFingerprint: fingerprint,
+        ed25519PublicKey: ed25519_public_key, // hex, for reference
+        registeredAt: Date.now(),
+        activated: false, // Will be set true after activate-key
+      },
+    });
+
     console.log(
       `[Device Register Key] Public key registered for ${record.userCode} ` +
-        `(org=${record.orgId}, key_id=${keyRecord.keyId})`
+        `(org=${record.orgId}, key_id=${keyRecord.keyId}, fingerprint=${fingerprint})`
     );
 
-    // 5. Return activation challenge for agent to sign
+    // 6. Return activation challenge for agent to sign
     return NextResponse.json({
       key_id: keyRecord.keyId,
       activation_challenge: Buffer.from(activationChallenge).toString('hex'),
-      public_key_fingerprint: keyRecord.publicKeys?.ed25519Fingerprint,
+      public_key_fingerprint: fingerprint,
       custody_model: 'SELF_SOVEREIGN',
       message:
         'Public key registered. Sign the activation_challenge with your private key ' +
