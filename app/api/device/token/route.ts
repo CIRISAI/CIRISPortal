@@ -9,13 +9,20 @@ import { isLicensedTemplate } from '@/lib/packages/registry';
  * POST /api/device/token
  *
  * Agent polls this endpoint to check if the user has completed
- * the device auth flow in the browser. Returns the provisioned
- * signing key once the user selects a template and confirms.
+ * the device auth flow in the browser.
  *
- * RFC 8628 compliant responses:
+ * SELF-CUSTODY FLOW (recommended):
+ * - 428: pending (user hasn't authenticated yet)
+ * - 200 status=authorized: user authenticated, agent must register its public key
+ * - 200 status=provisioned: key activated, registration complete
+ *
+ * LEGACY CUSTODIED FLOW (deprecated):
  * - 428: authorization_pending (user hasn't completed yet)
- * - 200: success (key provisioned, one-time delivery)
+ * - 200: success (key provisioned, one-time delivery with private key)
+ *
+ * RFC 8628 compliant error responses:
  * - 400: expired_token or invalid grant
+ * - 403: access_denied
  */
 export async function POST(request: Request) {
   try {
@@ -46,21 +53,82 @@ export async function POST(request: Request) {
 
     switch (record.status) {
       case 'pending':
-      case 'authorized':
-        // User hasn't completed yet — keep polling
+        // User hasn't authenticated yet — keep polling
         return NextResponse.json(
           { error: 'authorization_pending' },
           { status: 428 }
         );
 
+      case 'authorized':
+        // User authenticated and paid — agent must now register its public key
+        // SELF-CUSTODY: Agent generates keypair locally, registers PUBLIC KEY only
+        return NextResponse.json({
+          status: 'authorized',
+          custody_model: 'SELF_SOVEREIGN',
+          next_step: 'register_key',
+          device_code: device_code,
+          org_id: record.orgId,
+          agent_record: record.agentRecord
+            ? {
+                identity_template: record.agentRecord.identityTemplate,
+                stewardship_tier: record.agentRecord.stewardshipTier,
+                permitted_actions: record.agentRecord.permittedActions,
+                approved_adapters: record.agentRecord.approvedAdapters,
+              }
+            : undefined,
+          instructions: {
+            step_1:
+              'Generate Ed25519 keypair locally (or use CIRISVerify ephemeral key)',
+            step_2:
+              'POST /api/device/register-key with device_code, ed25519_public_key, ed25519_signature',
+            step_3:
+              'POST /api/device/activate-key with signed activation_challenge',
+            note: 'Private key NEVER leaves your device. CIRIS stores only your public key fingerprint.',
+          },
+        });
+
       case 'provisioned': {
-        // Key is ready — consume it (one-time delivery)
+        // SELF-CUSTODY: Key registered and activated — return confirmation (no private key!)
+        if (record.selfCustodyKey) {
+          const templateId = record.agentRecord?.identityTemplate;
+          return NextResponse.json({
+            status: 'provisioned',
+            custody_model: 'SELF_SOVEREIGN',
+            key_info: {
+              key_id: record.selfCustodyKey.keyId,
+              public_key_fingerprint:
+                record.selfCustodyKey.ed25519PublicKeyFingerprint,
+              activated: record.selfCustodyKey.activated,
+              org_id: record.orgId,
+            },
+            agent_record: record.agentRecord
+              ? {
+                  identity_template: record.agentRecord.identityTemplate,
+                  stewardship_tier: record.agentRecord.stewardshipTier,
+                  permitted_actions: record.agentRecord.permittedActions,
+                  approved_adapters: record.agentRecord.approvedAdapters,
+                }
+              : undefined,
+            portal_url: record.portalUrl,
+            licensed_package:
+              templateId && isLicensedTemplate(templateId)
+                ? {
+                    download_url: record.packageDownloadUrl,
+                    template_id: templateId,
+                  }
+                : null,
+            message: 'Self-custody key activated. You control the private key.',
+          });
+        }
+
+        // LEGACY CUSTODIED FLOW: Key is ready — consume it (one-time delivery)
+        // This path is deprecated; new agents should use self-custody
         const result = await consumeProvisionedKey(device_code);
         if (!result) {
           return NextResponse.json(
             {
               error: 'expired_token',
-              error_description: 'Key already consumed',
+              error_description: 'Key already consumed or not provisioned',
             },
             { status: 400 }
           );
@@ -70,6 +138,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           status: 'provisioned',
+          custody_model: 'CUSTODIED',
           signing_key: {
             ed25519_private_key: result.key.ed25519PrivateKey,
             ed25519_public_key: result.key.ed25519PublicKey,
@@ -85,7 +154,6 @@ export async function POST(request: Request) {
               }
             : undefined,
           portal_url: result.portalUrl,
-          // Licensed package info — agent downloads this zip after provisioning
           licensed_package:
             templateId && isLicensedTemplate(templateId)
               ? {
@@ -93,6 +161,8 @@ export async function POST(request: Request) {
                   template_id: templateId,
                 }
               : null,
+          _deprecated:
+            'Custodied key delivery is deprecated. Use self-custody flow instead.',
         });
       }
 
